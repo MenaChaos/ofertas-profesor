@@ -145,7 +145,7 @@ def enviar_mensaje():
                 f"**Descripción:** {best['desc']}\n\n"
                 f"**Calibración:** ⚡ {best['score']}/100\n"
                 f"**Descuento:** 📉 {best['descuento']}%\n"
-                f"**Costo:** 💰 {best['clp']}\n"
+                f"**Costo:** 🇨🇱 {best['clp']}\n"
                 f"**Ref. Argentina:** 🇦🇷 {best['ars_usd']}\n"
                 f"**Enlace:** https://store.steampowered.com/app/{best['id']}\n"
                 f"----------------------------------------------------------"
@@ -159,7 +159,7 @@ def enviar_mensaje():
         if l:
             final += f"### {cat}:\n"
             for s in l[1:5]:
-                final += f"• **{s['title']}**\n  💰 {s['clp']}  |  🇦🇷 {s['ars_usd']}  |  📉 -{s['descuento']}%\n\n"
+                final += f"• **{s['title']}**\n  🇨🇱 {s['clp']}  |  🇦🇷 {s['ars_usd']}  |  📉 -{s['descuento']}%\n\n"
     
     final += "----------------------------------------------------------\n"
     final += f"*{random.choice(FRASES_DESPEDIDA)}*"
