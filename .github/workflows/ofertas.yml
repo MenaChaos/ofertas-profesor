@@ -2,9 +2,8 @@ name: Ofertas del Profesor
 
 on:
   schedule:
-    # Se ejecutará todos los días a las 11:00 AM Chile (15:00 UTC)
     - cron: '0 15 * * *'
-  workflow_dispatch: # Esto nos permite probarlo manualmente
+  workflow_dispatch:
 
 jobs:
   build:
@@ -21,7 +20,7 @@ jobs:
       - name: Instalar librerías
         run: pip install requests
 
-     - name: Ejecutar script del Profesor
+      - name: Ejecutar script del Profesor
         env:
           WEBHOOK_PROFESOR: ${{ secrets.WEBHOOK_PROFESOR }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
