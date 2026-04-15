@@ -8,35 +8,25 @@ from deep_translator import GoogleTranslator
 FRASES_COOP = [
     "¡Buenas noticias, Jenkins! He encontrado un experimento grupal. Es casi tan peligroso como aquella vez que envié a la tripulación anterior a una avispa gigante... ¡Casi!",
     "¡Atención, tripulación! Este juego requiere trabajar en equipo. Si logran cooperar mejor que Fry y Bender cuando encuentran una moneda, ¡podrían sobrevivir!",
-    "¡Por todos los circuitos! Reúnan a sus amigos. He calibrado este juego para que sea más divertido que una visita al parque de diversiones lunar. ¡Cuidado con las ballenas!",
     "¡Tripulación! Este juego multijugador es la solución a sus problemas. O al menos lo será hasta que Zoidberg arruine todo con sus pinzas.",
-    "¡Increíble! Un juego para jugar juntos. Me recuerda a cuando fusioné las mentes de todos en un solo cuerpo. ¡Fue un desastre pegajoso, pero muy educativo!",
-    "¡Sálvense quienes puedan! Pero háganlo en modo cooperativo. ¡Es como ser digerido por una ballena espacial, pero con descuento!",
-    "¡Atención! He encontrado un experimento donde sus vidas dependen de la incompetencia de sus amigos... ¡Qué emoción!",
-    "He inventado un dispositivo para jugar en red. ¡Es como el Internet, pero con más gritos y menos control de esfínteres!",
     "¡Grandes noticias! Si juegan esto juntos en el servidor, sus posibilidades de supervivencia aumentan un 0.004%. ¡A celebrar!",
-    "¡Por el dulce néctar de Slurm! He hallado un juego cooperativo. ¡Intenten no matarse entre ustedes antes de que los enemigos lo hagan!",
-    "¡Jenkins! Este juego es la clave para la unidad. O para el odio eterno. De cualquier forma, ¡es ciencia!",
-    "¡Atención! Este juego es obligatorio. Si no lo juegan, tendré que usar mi 'A-dedo-dor' para obligarlos a presionar las teclas.",
-    "¡Tripulación! He encontrado algo más adictivo que el Blackjack y las mujerzuelas de Bender. ¡Miren!",
-    "¿Cooperación? ¡Qué concepto tan absurdo! Pero este juego lo hace ver divertido, como una carrera de babosas espaciales."
+    "¡Por el dulce néctar de Slurm! He hallado un juego cooperativo. ¡Intenten no matarse entre ustedes antes de que los enemigos lo hagan!"
 ]
 
 FRASES_SOLO = [
     "¡Buenas noticias! He encontrado un juego para jugar en soledad absoluta. ¡Justo como paso mis noches en el laboratorio de clones prohibidos!",
     "¡Ah, el dulce aislamiento! Este juego es perfecto para ignorar al resto del universo. ¡Es como meterse en mi propia Cámara de la Muerte!",
     "¡Por la gloria de la ciencia! Un juego para un solo sujeto de prueba. Si las cosas salen mal, siempre puedo reemplazarlos con un clon llamado Cubert.",
-    "He inventado un dispositivo para jugar solo. Es casi tan eficiente como mi 'Olioscopio', pero en lugar de oler el espacio, verán ofertas.",
-    "¿Compañía humana? ¡Puaj! Este juego es para genios solitarios. Me recuerda a cuando me exilié a un asteroide para construir robots que sintieran amor.",
-    "¡Miren esto! Un experimento de aislamiento puro. Es como viajar al final del universo y ver que solo hay otra pizzería de Panucci.",
-    "¡Increíble! Un mundo entero para explorar sin que nadie les pida dinero o les robe el botín. ¡El sueño de todo genio misántropo!",
     "He calibrado este juego para un solo sujeto de prueba. ¡No se preocupen, las posibilidades de fallo cerebral son de apenas el 97%!",
-    "¡Por todos los circuitos de un robot! Un juego individual para cuando la tripulación me tiene harto. ¡O sea, siempre!",
-    "¿Aburridos de sus insignificantes amigos? ¡Aquí tienen un juego para ser el rey del aislamiento!",
-    "¡Atención! Este juego es tan profundo que hará que olviden que no tienen una vida social real. ¡Ciencia!",
-    "He encontrado una oferta tan buena que mi 'Reloj de la Muerte' acaba de ganar 10 minutos de vida. ¡Juéguenlo solos!",
-    "¡Buenas noticias! Este juego es individual porque nadie más soportaría sus tácticas de juego, Jenkins.",
-    "¡Por la barba de un Neptuniano de cuatro brazos! Un juego para disfrutar en la paz de su propio bunker cerebral."
+    "¡Buenas noticias! Este juego es individual porque nadie más soportaría sus tácticas de juego, Jenkins."
+]
+
+FRASES_DESPEDIDA = [
+    "Los acompañaría a jugar, pero ya me puse la pijama.",
+    "Me gustaría ver cómo fallan en este experimento, pero tengo que ir a organizar mi colección de cables de distintas longitudes.",
+    "¡En fin, me voy a dormir! Si el laboratorio explota, no me despierten.",
+    "¡Buena suerte! Yo estaré en mi Cámara de la Muerte... es decir, en mi cuarto.",
+    "¡Ya hice suficiente por hoy! Mañana enviaré a alguien más a una misión suicida."
 ]
 
 def obtener_datos_steam(app_id):
@@ -84,7 +74,6 @@ def enviar_mensaje():
     candidatos_multi = []
     candidatos_solo = []
     
-    # Análisis masivo de 300 juegos
     for pagina in range(5):
         url_ofertas = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
         try:
@@ -105,40 +94,42 @@ def enviar_mensaje():
     candidatos_multi.sort(key=lambda x: (x['score'], x['ahorro']), reverse=True)
     candidatos_solo.sort(key=lambda x: (x['score'], x['ahorro']), reverse=True)
 
-    # --- NUEVA ESTRUCTURA DE ENVÍO CON EMBEDS VISUALES ---
-    for lista, modo, titulo_bloque, color_lateral in [
-        (candidatos_multi, "COOPERATIVA", "📡 RECOMENDACIÓN COOPERATIVA", 3066993), # Verde
-        (candidatos_solo, "INDIVIDUAL", "🧬 EXPERIMENTO DE AISLAMIENTO", 10181046)  # Morado
-    ]:
-        if lista:
-            best = lista[0]
-            resena = profesor_habla(best['title'], best['desc'], modo)
-            
-            # Construcción del Embed profesional
-            embed = {
-                "title": f"**{best['title']}**",
-                "description": resena,
-                "url": f"https://store.steampowered.com/app/{best['steamAppID']}",
-                "color": color_lateral,
-                "fields": [
-                    {"name": "⚡ Calibración", "value": f"{best['score']}/100", "inline": True},
-                    {"name": "📉 Descuento", "value": f"{best['ahorro']:.0f}%", "inline": True},
-                    {"name": "💰 Costo", "value": f"${best['salePrice']} USD", "inline": True}
-                ],
-                "image": {"url": f"https://cdn.akamai.steamstatic.com/steam/apps/{best['steamAppID']}/header.jpg"},
-                "footer": {
-                    "text": "Planet Express - Departamento de Gangas Espaciales",
-                    "icon_url": "https://i.imgur.com/vHpxX96.png"
-                }
-            }
+    mensaje_final = ""
+    
+    # Construcción del bloque Cooperativo
+    if candidatos_multi:
+        best = candidatos_multi[0]
+        resena = profesor_habla(best['title'], best['desc'], "COOPERATIVA")
+        mensaje_final += (
+            f"📡 **RECOMENDACIÓN COOPERATIVA DEL PROFESOR** 📡\n---\n"
+            f"{resena}\n\n"
+            f"**Calibración:** ⚡ {best['score']}/100\n"
+            f"**Descuento:** 📉 {best['ahorro']:.0f}%\n"
+            f"**Costo:** 💰 ${best['salePrice']} USD\n"
+            f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}\n\n"
+            f"** **\n" # Línea de espacio para evitar que se peguen
+            f"--------------------------------------------------\n"
+            f"** **\n"
+        )
 
-            payload = {
-                "username": "Profesor Farnsworth",
-                "avatar_url": "https://i.imgur.com/vHpxX96.png",
-                "embeds": [embed]
-            }
+    # Construcción del bloque Solo
+    if candidatos_solo:
+        best = candidatos_solo[0]
+        resena = profesor_habla(best['title'], best['desc'], "INDIVIDUAL")
+        mensaje_final += (
+            f"🧬 **EXPERIMENTO DE AISLAMIENTO DEL PROFESOR** 🧬\n---\n"
+            f"{resena}\n\n"
+            f"**Calibración:** ⚡ {best['score']}/100\n"
+            f"**Descuento:** 📉 {best['ahorro']:.0f}%\n"
+            f"**Costo:** 💰 ${best['salePrice']} USD\n"
+            f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}\n\n"
+        )
 
-            requests.post(webhook_url, json=payload)
+    # Añadir despedida
+    mensaje_final += f"*{random.choice(FRASES_DESPEDIDA)}*"
+
+    # Envío único para mantener el formato original
+    requests.post(webhook_url, json={"content": mensaje_final})
 
 if __name__ == "__main__":
     enviar_mensaje()
