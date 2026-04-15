@@ -60,6 +60,8 @@ def enviar_mensaje():
                 datos = obtener_precios_regionales(o['steamAppID'])
                 if datos:
                     o.update(datos)
+                    # Aseguramos el nombre del juego para el título destacado
+                    o['game_title'] = o.get('title', 'Sujeto de Prueba')
                     o['score'] = int(o.get('metacriticScore', 0))
                     if datos['es_multi']: candidatos_multi.append(o)
                     else: candidatos_solo.append(o)
@@ -69,16 +71,19 @@ def enviar_mensaje():
     for lista in [candidatos_multi, candidatos_solo]:
         lista.sort(key=lambda x: (x['score'], x['descuento']), reverse=True)
 
-    # --- ENVÍO CON ESTÉTICA FINAL ---
-    for lista, titulo, emoji, frase in [
+    # --- ENVÍO CON ESTÉTICA FINAL (JERARQUÍA CORREGIDA) ---
+    for lista, tipo_label, emoji, frase in [
         (candidatos_multi, "RECOMENDACIÓN COOPERATIVA", "📡", FRASES_COOP[0]),
         (candidatos_solo, "EXPERIMENTO DE AISLAMIENTO", "🧬", FRASES_SOLO[0])
     ]:
         if lista:
             best = lista[0]
+            # Formato optimizado: Título para notificación -> Separador -> Nombre del Juego -> Detalles
             msg = (
-                f"# {emoji} {titulo} {emoji}\n"
+                f"# 🧪 EL PROFESOR TIENE UNA {tipo_label}\n"
                 f"----------------------------------------------------------\n"
+                f"## {emoji} {best['game_title']} {emoji}\n"
+                f"----\n"
                 f"{frase}\n\n"
                 f"**Descripción:** {best['desc']}\n\n"
                 f"**Calibración:** ⚡ {best['score']}/100\n"
@@ -91,13 +96,21 @@ def enviar_mensaje():
             requests.post(webhook_url, json={"content": msg})
             time.sleep(2)
 
-    # Menciones Deshonrosas
-    final = "🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n---\n"
+    # --- MENCIONES DESHONROSAS (FORMATO LIMPIO) ---
+    final = "🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n"
+    final += "----------------------------------------------------------\n"
+    
     for cat, l in [("📡 Otros grupales", candidatos_multi), ("🧬 Otros solitarios", candidatos_solo)]:
         if l:
-            final += f"**{cat}:**\n"
-            final += "\n".join([f"• {s['title']}: {s['clp']} (Arg: {s['ars_usd']}) -{s['descuento']}%" for s in l[1:5]]) + "\n\n"
+            final += f"### {cat}:\n"
+            # Iteramos omitiendo el primero de cada lista (índices 1 al 4)
+            for s in l[1:5]:
+                final += (
+                    f"• **{s['title']}**\n"
+                    f"  💰 {s['clp']}  |  🇦🇷 {s['ars_usd']}  |  📉 -{s['descuento']}%\n\n"
+                )
     
+    final += "----------------------------------------------------------\n"
     final += f"*{FRASES_DESPEDIDA[0]}*"
     requests.post(webhook_url, json={"content": final})
 
