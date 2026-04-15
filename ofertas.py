@@ -8,7 +8,6 @@ from deep_translator import GoogleTranslator
 FRASES_COOP = [
     "¡Buenas noticias, Jenkins! He encontrado un experimento grupal. Es casi tan peligroso como aquella vez que envié a la tripulación anterior a una avispa gigante... ¡Casi!",
     "¡Atención, tripulación! Este juego requiere trabajar en equipo. Si logran cooperar mejor que Fry y Bender cuando encuentran una moneda, ¡podrían sobrevivir!",
-    "¡Tripulación! Este juego multijugador es la solución a sus problemas. O al menos lo será hasta que Zoidberg arruine todo con sus pinzas.",
     "¡Grandes noticias! Si juegan esto juntos en el servidor, sus posibilidades de supervivencia aumentan un 0.004%. ¡A celebrar!",
     "¡Por el dulce néctar de Slurm! He hallado un juego cooperativo. ¡Intenten no matarse entre ustedes antes de que los enemigos lo hagan!"
 ]
@@ -17,7 +16,6 @@ FRASES_SOLO = [
     "¡Buenas noticias! He encontrado un juego para jugar en soledad absoluta. ¡Justo como paso mis noches en el laboratorio de clones prohibidos!",
     "¡Ah, el dulce aislamiento! Este juego es perfecto para ignorar al resto del universo. ¡Es como meterse en mi propia Cámara de la Muerte!",
     "¡Por la gloria de la ciencia! Un juego para un solo sujeto de prueba. Si las cosas salen mal, siempre puedo reemplazarlos con un clon llamado Cubert.",
-    "He calibrado este juego para un solo sujeto de prueba. ¡No se preocupen, las posibilidades de fallo cerebral son de apenas el 97%!",
     "¡Buenas noticias! Este juego es individual porque nadie más soportaría sus tácticas de juego, Jenkins."
 ]
 
@@ -25,7 +23,6 @@ FRASES_DESPEDIDA = [
     "Los acompañaría a jugar, pero ya me puse la pijama.",
     "Me gustaría ver cómo fallan en este experimento, pero tengo que ir a organizar mi colección de cables de distintas longitudes.",
     "¡En fin, me voy a dormir! Si el laboratorio explota, no me despierten.",
-    "¡Buena suerte! Yo estaré en mi Cámara de la Muerte... es decir, en mi cuarto.",
     "¡Ya hice suficiente por hoy! Mañana enviaré a alguien más a una misión suicida."
 ]
 
@@ -74,6 +71,7 @@ def enviar_mensaje():
     candidatos_multi = []
     candidatos_solo = []
     
+    # Análisis masivo de 300 juegos
     for pagina in range(5):
         url_ofertas = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
         try:
@@ -94,42 +92,51 @@ def enviar_mensaje():
     candidatos_multi.sort(key=lambda x: (x['score'], x['ahorro']), reverse=True)
     candidatos_solo.sort(key=lambda x: (x['score'], x['ahorro']), reverse=True)
 
-    mensaje_final = ""
-    
-    # Construcción del bloque Cooperativo
+    # --- ENVÍO DIVIDIDO PARA FORMATO IMPECABLE ---
+
+    # 1. Mensaje Cooperativo
     if candidatos_multi:
         best = candidatos_multi[0]
         resena = profesor_habla(best['title'], best['desc'], "COOPERATIVA")
-        mensaje_final += (
+        m_coop = (
             f"📡 **RECOMENDACIÓN COOPERATIVA DEL PROFESOR** 📡\n---\n"
             f"{resena}\n\n"
             f"**Calibración:** ⚡ {best['score']}/100\n"
             f"**Descuento:** 📉 {best['ahorro']:.0f}%\n"
             f"**Costo:** 💰 ${best['salePrice']} USD\n"
-            f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}\n\n"
-            f"** **\n" # Línea de espacio para evitar que se peguen
-            f"--------------------------------------------------\n"
-            f"** **\n"
+            f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}"
         )
+        requests.post(webhook_url, json={"content": m_coop})
+        time.sleep(2) # Pausa para asegurar el orden en Discord
 
-    # Construcción del bloque Solo
+    # 2. Mensaje de Aislamiento
     if candidatos_solo:
         best = candidatos_solo[0]
         resena = profesor_habla(best['title'], best['desc'], "INDIVIDUAL")
-        mensaje_final += (
+        m_solo = (
             f"🧬 **EXPERIMENTO DE AISLAMIENTO DEL PROFESOR** 🧬\n---\n"
             f"{resena}\n\n"
             f"**Calibración:** ⚡ {best['score']}/100\n"
             f"**Descuento:** 📉 {best['ahorro']:.0f}%\n"
             f"**Costo:** 💰 ${best['salePrice']} USD\n"
-            f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}\n\n"
+            f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}"
         )
+        requests.post(webhook_url, json={"content": m_solo})
+        time.sleep(2)
 
-    # Añadir despedida
-    mensaje_final += f"*{random.choice(FRASES_DESPEDIDA)}*"
+    # 3. Menciones Deshonrosas y Despedida
+    final_info = "🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n---\n"
+    
+    if len(candidatos_multi) > 1:
+        sec_m = ", ".join([f"{s['title']} ({s['score']}/100)" for s in candidatos_multi[1:5]])
+        final_info += f"*Otros especímenes grupales:* {sec_m}\n"
+    
+    if len(candidatos_solo) > 1:
+        sec_s = ", ".join([f"{s['title']} ({s['score']}/100)" for s in candidatos_solo[1:5]])
+        final_info += f"*Otros especímenes solitarios:* {sec_s}\n"
 
-    # Envío único para mantener el formato original
-    requests.post(webhook_url, json={"content": mensaje_final})
+    final_info += f"\n*{random.choice(FRASES_DESPEDIDA)}*"
+    requests.post(webhook_url, json={"content": final_info})
 
 if __name__ == "__main__":
     enviar_mensaje()
