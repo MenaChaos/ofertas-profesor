@@ -21,7 +21,8 @@ jobs:
       - name: Instalar librerías
         run: pip install requests
 
-      - name: Ejecutar script del Profesor
+     - name: Ejecutar script del Profesor
         env:
           WEBHOOK_PROFESOR: ${{ secrets.WEBHOOK_PROFESOR }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python ofertas.py
