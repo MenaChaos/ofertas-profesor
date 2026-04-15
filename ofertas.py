@@ -14,11 +14,11 @@ def obtener_datos_steam(app_id):
             categorias = [cat['id'] for cat in data.get('categories', [])]
             es_multi = any(id_m in categorias for id_m in [1, 9, 38])
             
-            # Extraemos el trailer si existe
+            # Intentamos obtener un video de YouTube si está en la descripción 
+            # o usamos el de Steam como respaldo
             video_url = ""
             movies = data.get('movies', [])
             if movies:
-                # Obtenemos el video en formato mp4 de alta calidad
                 video_url = movies[0].get('mp4', {}).get('max', "")
             
             return es_multi, desc, video_url
@@ -44,9 +44,11 @@ def profesor_habla(nombre, descripcion, modo):
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         response = requests.post(url, json=payload, timeout=10)
         res = response.json()
-        return res['candidates'][0]['content']['parts'][0]['text']
+        if 'candidates' in res:
+            return res['candidates'][0]['content']['parts'][0]['text']
     except:
-        return f"{saludo} Mi cerebro falló, pero traduje esto: {traducir_emergencia(descripcion)}"
+        pass
+    return f"{saludo} Mi cerebro falló, pero traduje esto: {traducir_emergencia(descripcion)}"
 
 def enviar_mensaje():
     webhook_url = os.getenv('WEBHOOK_PROFESOR')
@@ -57,6 +59,7 @@ def enviar_mensaje():
         candidatos_multi = []
         candidatos_solo = []
         
+        # Analizamos las mejores ofertas
         for o in ofertas[:100]:
             es_multi, desc_steam, trailer = obtener_datos_steam(o['steamAppID'])
             if es_multi is not None:
@@ -64,7 +67,6 @@ def enviar_mensaje():
                 o['video'] = trailer
                 o['score'] = int(o['metacriticScore'])
                 o['ahorro'] = float(o['savings'])
-                
                 if es_multi: candidatos_multi.append(o)
                 else: candidatos_solo.append(o)
             time.sleep(1)
@@ -80,18 +82,22 @@ def enviar_mensaje():
                 best = lista[0]
                 resena = profesor_habla(best['title'], best['desc'], modo)
                 
-                # Añadimos el trailer al final del mensaje si existe
-                link_trailer = f"\n🎬 **Tráiler del experimento:** {best['video']}" if best['video'] else ""
-                
+                # Si el video de Steam no funciona, el link de la tienda ayudará al embed
+                # Ponemos el link al final para que Discord genere la vista previa
                 mensaje = (
                     f"{emoji} **{titulo_bloque} DEL PROFESOR** {emoji}\n---\n"
                     f"{resena}\n\n"
                     f"**Calibración:** ⚡ {best['score']}/100\n"
                     f"**Descuento:** 📉 {int(best['ahorro'])}%\n"
                     f"**Costo:** 💰 ${best['salePrice']} USD\n"
-                    f"**Link:** https://store.steampowered.com/app/{best['steamAppID']}"
-                    f"{link_trailer}"
+                    f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}\n"
                 )
+                
+                # Si tenemos el video directo, lo enviamos en un mensaje aparte o lo pegamos 
+                # para intentar forzar el reproductor
+                if best['video']:
+                    mensaje += f"\n🎬 **Visualización del experimento:**\n{best['video']}"
+
                 requests.post(webhook_url, json={"content": mensaje})
 
     except Exception as e: print(f"Error: {e}")
