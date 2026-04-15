@@ -24,9 +24,9 @@ def profesor_traductor(nombre, descripcion_steam):
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     prompt = (
-        f"Eres el Profesor Farnsworth de Futurama. Traduce esta descripción de un juego a tu estilo "
-        f"sarcástico y loco. Empieza con '¡Buenas noticias!'. No uses más de 3 líneas. "
-        f"Juego: {nombre}. Descripción: {descripcion_steam}"
+        f"Eres el Profesor Farnsworth de Futurama. Traduce la siguiente descripción al ESPAÑOL "
+        f"con tu estilo sarcástico y loco. Empieza con '¡Buenas noticias!'. "
+        f"Sé breve. Juego: {nombre}. Descripción a traducir: {descripcion_steam}"
     )
     
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
