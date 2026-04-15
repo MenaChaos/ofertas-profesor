@@ -2,9 +2,8 @@ import requests
 import os
 import time
 import random
-from deep_translator import GoogleTranslator
 
-# --- BANCO DE DATOS MAESTRO DEL PROFESOR ---
+# --- CONFIGURACIÓN DE PERSONALIDAD ---
 FRASES_COOP = [
     "¡Buenas noticias, Jenkins! He encontrado un experimento grupal. Es casi tan peligroso como aquella vez que envié a la tripulación anterior a una avispa gigante... ¡Casi!",
     "¡Atención, tripulación! Este juego requiere trabajar en equipo. Si logran cooperar mejor que Fry y Bender cuando encuentran una moneda, ¡podrían sobrevivir!",
@@ -27,33 +26,43 @@ FRASES_DESPEDIDA = [
 ]
 
 def obtener_datos_steam(app_id):
+    """Obtiene datos directamente de Steam usando región Chile (cc=cl)."""
     try:
-        url = f"https://store.steampowered.com/api/appdetails?appids={app_id}&l=spanish"
-        res = requests.get(url).json()
+        # cc=cl fuerza precios en CLP, l=spanish para categorías en español
+        url = f"https://store.steampowered.com/api/appdetails?appids={app_id}&cc=cl&l=spanish"
+        res = requests.get(url, timeout=10).json()
         if res and res[str(app_id)]['success']:
             data = res[str(app_id)]['data']
-            desc = data.get('short_description', 'Sin descripción.')
+            
+            # Extraemos géneros para que la IA sepa de qué trata el juego
+            generos = [g['description'] for g in data.get('genres', [])]
+            generos_str = ", ".join(generos) if generos else "Desconocido"
+            
+            # Extraemos el precio formateado directamente (ej: CLP$ 3.725)
+            precio_clp = data.get('price_overview', {}).get('final_formatted', 'Gratis o N/A')
+            
+            # Clasificación multijugador
             categorias = [cat['id'] for cat in data.get('categories', [])]
             es_multi = any(id_m in categorias for id_m in [1, 9, 38])
-            return es_multi, desc
-        return None, ""
-    except: return None, ""
+            
+            return es_multi, generos_str, precio_clp
+        return None, "", ""
+    except:
+        return None, "", ""
 
-def traducir_emergencia(texto):
-    try:
-        return GoogleTranslator(source='auto', target='es').translate(texto)
-    except: return texto
-
-def profesor_habla(nombre, descripcion, modo):
+def profesor_habla(nombre, generos, score, modo):
+    """Usa Gemini para inventar una reseña basada en datos, no en traducciones."""
     frase_base = random.choice(FRASES_COOP if modo == "COOPERATIVA" else FRASES_SOLO)
     api_key = os.getenv('GEMINI_API_KEY')
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
+    # El secreto: Le pedimos que use su conocimiento del juego basándose en el nombre y géneros
     prompt = (
         f"Actúa como el Profesor Farnsworth de Futurama. "
         f"Usa OBLIGATORIAMENTE esta frase inicial: '{frase_base}'. "
-        f"Escribe una reseña corta y sarcástica sobre '{nombre}' para los Jenkins. "
-        f"Base: {descripcion}. Responde en español."
+        f"Escribe una reseña corta (máximo 3 líneas), sarcástica y graciosa sobre el juego '{nombre}'. "
+        f"Contexto científico: Géneros: {generos}. Calificación Metacritic: {score}/100. "
+        f"Habla directamente a 'los Jenkins'. No menciones que eres una IA. Responde en español."
     )
     
     try:
@@ -64,14 +73,15 @@ def profesor_habla(nombre, descripcion, modo):
             return res['candidates'][0]['content']['parts'][0]['text']
     except: pass
     
-    return f"{frase_base}\n\n[Cerebro fallando...] Traducción: {traducir_emergencia(descripcion)}"
+    # Si la IA falla, un mensaje genérico del profesor para no romper el estilo
+    return f"{frase_base}\n\n¡Rayos! Mi detector de reseñas se quedó sin Slurm para '{nombre}', pero mi instinto científico dice que por ese precio vale la pena el riesgo."
 
 def enviar_mensaje():
     webhook_url = os.getenv('WEBHOOK_PROFESOR')
     candidatos_multi = []
     candidatos_solo = []
     
-    # Análisis masivo de 300 juegos
+    # Análisis de ofertas (CheapShark nos da la lista inicial y el Metacritic Score)
     for pagina in range(5):
         url_ofertas = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
         try:
@@ -79,68 +89,70 @@ def enviar_mensaje():
             if not ofertas: break
             for o in ofertas:
                 if not o.get('steamAppID'): continue
-                es_multi, desc_steam = obtener_datos_steam(o['steamAppID'])
+                
+                # Obtener datos reales de Chile
+                es_multi, generos, precio_clp = obtener_datos_steam(o['steamAppID'])
+                
                 if es_multi is not None:
-                    o['desc'] = desc_steam
+                    o['generos'] = generos
+                    o['precio_clp'] = precio_clp
                     o['score'] = int(o.get('metacriticScore', 0))
                     o['ahorro'] = float(o.get('savings', 0))
+                    
                     if es_multi: candidatos_multi.append(o)
                     else: candidatos_solo.append(o)
-                time.sleep(1.1)
+                time.sleep(1.1) # Respetar límites de API
         except: continue
 
+    # Ordenar por puntaje y ahorro
     candidatos_multi.sort(key=lambda x: (x['score'], x['ahorro']), reverse=True)
     candidatos_solo.sort(key=lambda x: (x['score'], x['ahorro']), reverse=True)
 
-    # --- ENVÍO DIVIDIDO PARA FORMATO IMPECABLE ---
+    # --- INICIO DE ENVÍOS SEPARADOS ---
 
-    # 1. Mensaje Cooperativo
+    # 1. Recomendación Cooperativa (Mensaje 1)
     if candidatos_multi:
         best = candidatos_multi[0]
-        resena = profesor_habla(best['title'], best['desc'], "COOPERATIVA")
+        resena = profesor_habla(best['title'], best['generos'], best['score'], "COOPERATIVA")
         m_coop = (
-            f"📡 **RECOMENDACIÓN COOPERATIVA DEL PROFESOR** 📡\n---\n"
+            f"📡 **RECOMENDACIÓN COOPERATIVA DEL PROFESOR** 📡\n"
+            f"**Descuento:** 📉 {best['ahorro']:.0f}%\n---\n"
             f"{resena}\n\n"
             f"**Calibración:** ⚡ {best['score']}/100\n"
-            f"**Descuento:** 📉 {best['ahorro']:.0f}%\n"
-            f"**Costo:** 💰 ${best['salePrice']} USD\n"
+            f"**Costo:** 💰 {best['precio_clp']}\n"
             f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}"
         )
         requests.post(webhook_url, json={"content": m_coop})
-        time.sleep(2) # Pausa para asegurar el orden en Discord
+        time.sleep(2)
 
-    # 2. Mensaje de Aislamiento
+    # 2. Experimento de Aislamiento (Mensaje 2)
     if candidatos_solo:
         best = candidatos_solo[0]
-        resena = profesor_habla(best['title'], best['desc'], "INDIVIDUAL")
+        resena = profesor_habla(best['title'], best['generos'], best['score'], "INDIVIDUAL")
         m_solo = (
-            f"🧬 **EXPERIMENTO DE AISLAMIENTO DEL PROFESOR** 🧬\n---\n"
+            f"🧬 **EXPERIMENTO DE AISLAMIENTO DEL PROFESOR** 🧬\n"
+            f"**Descuento:** 📉 {best['ahorro']:.0f}%\n---\n"
             f"{resena}\n\n"
             f"**Calibración:** ⚡ {best['score']}/100\n"
-            f"**Descuento:** 📉 {best['ahorro']:.0f}%\n"
-            f"**Costo:** 💰 ${best['salePrice']} USD\n"
+            f"**Costo:** 💰 {best['precio_clp']}\n"
             f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}"
         )
         requests.post(webhook_url, json={"content": m_solo})
         time.sleep(2)
 
-    # 3. Menciones Deshonrosas y Despedida
+    # 3. Menciones Deshonrosas (Mensaje 3)
     final_info = "🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n---\n"
-    final_info += "¡Atención! He detectado otros experimentos con una tasa de éxito alarmantemente alta. Son juegos en oferta que merecen que les echen un ojo antes de que el universo colapse o yo olvide dónde dejé mis lentes.\n\n"
+    final_info += "He detectado otros especímenes con ofertas excelentes para Chile. Échenles un ojo antes de que yo olvide por qué estamos aquí.\n\n"
     
     if len(candidatos_multi) > 1:
-        final_info += "**📡 Otros especímenes grupales:**\n"
-        menciones_m = []
-        for s in candidatos_multi[1:5]:
-            menciones_m.append(f"• {s['title']}: ${s['salePrice']} USD (-{s['ahorro']:.0f}%)")
-        final_info += "\n".join(menciones_m) + "\n\n"
+        final_info += "**📡 Otros sujetos grupales:**\n"
+        final_info += "\n".join([f"• {s['title']}: {s['precio_clp']} (-{s['ahorro']:.0f}%)" for s in candidatos_multi[1:5]])
+        final_info += "\n\n"
     
     if len(candidatos_solo) > 1:
-        final_info += "**🧬 Otros especímenes solitarios:**\n"
-        menciones_s = []
-        for s in candidatos_solo[1:5]:
-            menciones_s.append(f"• {s['title']}: ${s['salePrice']} USD (-{s['ahorro']:.0f}%)")
-        final_info += "\n".join(menciones_s) + "\n\n"
+        final_info += "**🧬 Otros sujetos solitarios:**\n"
+        final_info += "\n".join([f"• {s['title']}: {s['precio_clp']} (-{s['ahorro']:.0f}%)" for s in candidatos_solo[1:5]])
+        final_info += "\n\n"
 
     final_info += f"*{random.choice(FRASES_DESPEDIDA)}*"
     requests.post(webhook_url, json={"content": final_info})
