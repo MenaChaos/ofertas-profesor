@@ -6,30 +6,35 @@ import time
 def generar_resena_ia(nombre_juego):
     api_key = os.getenv('GEMINI_API_KEY')
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-    headers = {'Content-Type': 'application/json'}
     
-    # Lo intentaremos hasta 3 veces si la IA se pone difícil
-    for intento in range(3):
-        prompt_text = (
-            f"Actúa como el Profesor Farnsworth de Futurama. "
-            f"Analiza el juego '{nombre_juego}' (que es cooperativo/multijugador). "
-            f"Danos una reseña con tu frase '¡Buenas noticias!'. Explica con sarcasmo por qué "
-            f"los Jenkins deberían jugarlo juntos. Usa máximo 4 líneas. Intento número {intento+1}."
-        )
+    # Instrucción ultra-directa
+    prompt_text = f"Escribe un mensaje corto como el Profesor Farnsworth de Futurama sobre el juego {nombre_juego}. Empieza con '¡Buenas noticias!'. Explica por qué es divertido jugar con amigos. Máximo 50 palabras."
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt_text}]
+        }],
+        "safetySettings": [ # Esto desactiva filtros que podrían estar bloqueando la respuesta
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ]
+    }
+
+    try:
+        response = requests.post(url, json=payload, timeout=30)
+        res = response.json()
         
-        payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
+        # Imprimimos la respuesta en el log de GitHub por si vuelve a fallar
+        print(f"Respuesta IA: {res}") 
         
-        try:
-            response = requests.post(url, json=payload, headers=headers, timeout=30)
-            res = response.json()
-            if 'candidates' in res:
-                texto = res['candidates'][0]['content']['parts'][0]['text']
-                if texto: return texto
-        except Exception as e:
-            print(f"Intento {intento+1} fallido: {e}")
-            time.sleep(5) # Esperamos 5 segundos antes de reintentar
-            
-    return "¡Buenas noticias! El juego es tan avanzado que mi cerebro biónico sufrió un cortocircuito tratando de entender su genialidad. ¡Solo cómprenlo!"
+        if 'candidates' in res and len(res['candidates']) > 0:
+            return res['candidates'][0]['content']['parts'][0]['text']
+    except Exception as e:
+        print(f"Error crítico: {e}")
+        
+    return "¡Buenas noticias! He encontrado un juego excelente, pero mi transmisor interplanetario está fallando. ¡Confíen en mi intelecto y jueguen esto!"
 
 def es_multijugador(app_id):
     try:
