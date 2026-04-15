@@ -63,10 +63,11 @@ def enviar_mensaje():
         link = f"https://store.steampowered.com/app/{juego['steamAppID']}"
         precio = juego['salePrice']
         
-        # Formato elegante con la reseña de la IA
-        mensaje = f"{resena}\n\n**Precio:** ${precio} (Oferta de Steam)\n**Link:** {link}"
+        # El mensaje debe ir dentro de un diccionario para ser un JSON válido
+        mensaje_final = f"{resena}\n\n**Precio:** ${precio} (Oferta de Steam)\n**Link:** {link}"
+        payload = {"content": mensaje_final}
         
-        requests.post(webhook_url, json=mensaje)
+        requests.post(webhook_url, json=payload)
         print(f"Reseña enviada para {juego['title']}")
 
 if __name__ == "__main__":
