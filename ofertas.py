@@ -1,6 +1,7 @@
 import requests
 import os
 import time
+import random #
 from deep_translator import GoogleTranslator
 
 def obtener_datos_steam(app_id):
@@ -11,7 +12,6 @@ def obtener_datos_steam(app_id):
             data = res[str(app_id)]['data']
             desc = data.get('short_description', 'Sin descripción.')
             categorias = [cat['id'] for cat in data.get('categories', [])]
-            # Categorías: 1 (Multiplayer), 9 (Co-op), 38 (Online Co-op)
             es_multi = any(id_m in categorias for id_m in [1, 9, 38])
             return es_multi, desc
         return False, ""
@@ -23,15 +23,27 @@ def traducir_emergencia(texto):
     except: return texto
 
 def profesor_habla(nombre, descripcion):
+    # Lista de saludos variados para que no siempre sea "¡Buenas noticias!"
+    saludos = [
+        "¡Buenas noticias!",
+        "¡Por todos los circuitos de un robot!",
+        "¡Atención, tripulación de Planet Express!",
+        "¡Grandes noticias, a menos que mueran!",
+        "¡He inventado un dispositivo de ofertas!",
+        "¡Sálvese quien pueda! Pero antes, miren esto:",
+        "¡Increíble! He encontrado algo digno de mi genio:"
+    ]
+    saludo_elegido = random.choice(saludos) #
+
     api_key = os.getenv('GEMINI_API_KEY')
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
-    # Prompt ajustado para que el Profesor sepa que es una recomendación cooperativa
     prompt = (
         f"Actúa como el Profesor Farnsworth de Futurama. "
         f"Escribe una reseña corta y sarcástica para el juego '{nombre}'. "
-        f"Es un juego cooperativo/multijugador para jugar con amigos. "
-        f"Traduce o resume esta descripción al español: {descripcion}"
+        f"Empieza con esta frase exacta: '{saludo_elegido}'. "
+        f"Menciona que es cooperativo/multijugador. "
+        f"Traduce o resume esto al español: {descripcion}"
     )
     
     try:
@@ -43,7 +55,7 @@ def profesor_habla(nombre, descripcion):
     except: pass
     
     desc_es = traducir_emergencia(descripcion)
-    return f"¡Buenas noticias! Mi cerebro falló, pero traduje esto para ustedes: {desc_es}"
+    return f"{saludo_elegido} Mi cerebro falló, pero traduje esto: {desc_es}"
 
 def enviar_mensaje():
     webhook_url = os.getenv('WEBHOOK_PROFESOR')
@@ -55,14 +67,14 @@ def enviar_mensaje():
         if es_multi:
             resena = profesor_habla(o['title'], desc_steam)
             
-            # Formateo del mensaje con etiquetas claras
+            # Formato con emojis científicos y variados
             mensaje = (
                 f"📡 **RECOMENDACIÓN COOPERATIVA DEL PROFESOR** 📡\n"
                 f"---"
                 f"\n{resena}\n\n"
-                f"**Tipo de experimento:** 🎮 Multijugador / Cooperativo\n"
-                f"**Nota de los críticos:** ⭐ {o['metacriticScore']}/100\n"
-                f"**Costo de los materiales:** ${o['salePrice']} USD\n"
+                f"**Tipo de experimento:** 🧪 Multijugador / Cooperativo\n"
+                f"**Calibración crítica:** ⚡ {o['metacriticScore']}/100\n"
+                f"**Costo de materiales:** 💰 ${o['salePrice']} USD\n"
                 f"**Enlace al vicio:** https://store.steampowered.com/app/{o['steamAppID']}"
             )
             requests.post(webhook_url, json={"content": mensaje})
