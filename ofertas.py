@@ -6,24 +6,37 @@ import time
 def generar_resena_ia(nombre_juego):
     api_key = os.getenv('GEMINI_API_KEY')
     if not api_key:
-        return "¡Es un buen juego, estúpidos! Compren la cuestión."
+        return "¡Buenas noticias! He encontrado un juego, pero he olvidado mi llave API en mi otra bata."
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
-    prompt = {
+    headers = {'Content-Type': 'application/json'}
+    
+    prompt_text = (
+        f"Eres el Profesor Hubert J. Farnsworth de Futurama. "
+        f"Danos una 'Buena Noticia' sobre el juego '{nombre_juego}'. "
+        f"Explica brevemente por qué es una joya para jugar con amigos (multijugador). "
+        f"Sé sarcástico, usa tus frases icónicas y no te pases de 3 líneas."
+    )
+    
+    payload = {
         "contents": [{
-            "parts": [{
-                "text": f"Actúa como el Profesor Farnsworth de Futurama. Dame una reseña extremadamente corta (máximo 2 frases) sobre el juego '{nombre_juego}'. Usa su frase '¡Buenas noticias!' y menciona por qué es bueno jugarlo con amigos o por qué es una joya. Sé sarcástico y gracioso."
-            }]
+            "parts": [{"text": prompt_text}]
         }]
     }
 
     try:
-        response = requests.post(url, json=prompt)
+        response = requests.post(url, json=payload, headers=headers)
         res = response.json()
-        return res['candidates'][0]['content']['parts'][0]['text']
-    except:
-        return "¡Buenas noticias! He encontrado un juego que mi demencia senil me impide describir, ¡pero comprenlo!"
+        # Verificamos si la respuesta tiene el contenido esperado
+        if 'candidates' in res and res['candidates'][0]['content']['parts'][0]['text']:
+            return res['candidates'][0]['content']['parts'][0]['text']
+        else:
+            print(f"Respuesta inesperada de la IA: {res}")
+            return "¡Buenas noticias! El juego es magnífico, pero mi cerebro está en un frasco y no puede describirlo ahora."
+    except Exception as e:
+        print(f"Error en la IA: {e}")
+        return "¡Buenas noticias! He encontrado un juego que mi demencia senil me impide describir, ¡pero cómprenlo!"
 
 def es_multijugador(app_id):
     try:
