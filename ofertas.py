@@ -84,6 +84,7 @@ def enviar_mensaje():
     candidatos_multi = []
     candidatos_solo = []
     
+    # Análisis masivo de 300 juegos
     for pagina in range(5):
         url_ofertas = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
         try:
@@ -104,22 +105,40 @@ def enviar_mensaje():
     candidatos_multi.sort(key=lambda x: (x['score'], x['ahorro']), reverse=True)
     candidatos_solo.sort(key=lambda x: (x['score'], x['ahorro']), reverse=True)
 
-    for lista, modo, titulo, emoji in [
-        (candidatos_multi, "COOPERATIVA", "RECOMENDACIÓN COOPERATIVA", "📡"),
-        (candidatos_solo, "INDIVIDUAL", "EXPERIMENTO DE AISLAMIENTO", "🧬")
+    # --- NUEVA ESTRUCTURA DE ENVÍO CON EMBEDS VISUALES ---
+    for lista, modo, titulo_bloque, color_lateral in [
+        (candidatos_multi, "COOPERATIVA", "📡 RECOMENDACIÓN COOPERATIVA", 3066993), # Verde
+        (candidatos_solo, "INDIVIDUAL", "🧬 EXPERIMENTO DE AISLAMIENTO", 10181046)  # Morado
     ]:
         if lista:
             best = lista[0]
             resena = profesor_habla(best['title'], best['desc'], modo)
-            mensaje = (
-                f"{emoji} **{titulo} DEL PROFESOR** {emoji}\n---\n"
-                f"{resena}\n\n"
-                f"**Calibración crítica:** ⚡ {best['score']}/100\n"
-                f"**Descuento de locura:** 📉 {int(best['ahorro'])}%\n"
-                f"**Costo de materiales:** 💰 ${best['salePrice']} USD\n"
-                f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}"
-            )
-            requests.post(webhook_url, json={"content": mensaje})
+            
+            # Construcción del Embed profesional
+            embed = {
+                "title": f"**{best['title']}**",
+                "description": resena,
+                "url": f"https://store.steampowered.com/app/{best['steamAppID']}",
+                "color": color_lateral,
+                "fields": [
+                    {"name": "⚡ Calibración", "value": f"{best['score']}/100", "inline": True},
+                    {"name": "📉 Descuento", "value": f"{best['ahorro']:.0f}%", "inline": True},
+                    {"name": "💰 Costo", "value": f"${best['salePrice']} USD", "inline": True}
+                ],
+                "image": {"url": f"https://cdn.akamai.steamstatic.com/steam/apps/{best['steamAppID']}/header.jpg"},
+                "footer": {
+                    "text": "Planet Express - Departamento de Gangas Espaciales",
+                    "icon_url": "https://i.imgur.com/vHpxX96.png"
+                }
+            }
+
+            payload = {
+                "username": "Profesor Farnsworth",
+                "avatar_url": "https://i.imgur.com/vHpxX96.png",
+                "embeds": [embed]
+            }
+
+            requests.post(webhook_url, json=payload)
 
 if __name__ == "__main__":
     enviar_mensaje()
