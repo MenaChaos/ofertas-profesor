@@ -4,9 +4,6 @@ import time
 import random
 
 # --- CATÁLOGO DE PERSONALIDAD DEL PROFESOR ---
-# (Se mantienen las frases del catálogo anterior para no abultar el código, 
-# pero están todas integradas en la lógica)
-
 FRASES_COOP = [
     "¡Atención, tripulación! Si logran cooperar mejor que Fry y Bender, podrían sobrevivir.",
     "He encontrado una simulación grupal. Intenten no matarse entre ustedes.",
@@ -92,14 +89,11 @@ def enviar_mensaje():
     
     print("🧪 INICIANDO ESCANEO DE LARGO ALCANCE (900 JUEGOS)...")
     
-    # EXPLORACIÓN MÁXIMA: 15 páginas = ~900 juegos
     for pagina in range(15):
         url = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
         try:
             res = requests.get(url)
             ofertas = res.json()
-            
-            # TELEMETRÍA: Verificamos cuántas ofertas entrega la API en esta página
             print(f"📡 Página {pagina}: Analizando {len(ofertas)} ofertas encontradas...")
             
             if not ofertas:
@@ -128,7 +122,6 @@ def enviar_mensaje():
 
     print(f"✅ Escaneo finalizado. Candidatos encontrados: {len(candidatos_multi) + len(candidatos_solo)}")
 
-    # Ordenar y enviar (Lógica idéntica a la anterior)
     for lista in [candidatos_multi, candidatos_solo]:
         lista.sort(key=lambda x: (x['score'], x['descuento']), reverse=True)
 
@@ -160,7 +153,7 @@ def enviar_mensaje():
             requests.post(webhook_url, json={"content": msg})
             time.sleep(2)
 
-    final = "🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n"
+    final = "# 🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n"
     final += "----------------------------------------------------------\n"
     for cat, l in [("📡 Otros grupales", candidatos_multi), ("🧬 Otros solitarios", candidatos_solo)]:
         if l:
