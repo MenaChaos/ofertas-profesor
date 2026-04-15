@@ -9,28 +9,29 @@ FRASES_SOLO = ["¡Ah, el dulce aislamiento! Perfecto para ignorar al resto del u
 FRASES_DESPEDIDA = ["Ya hice suficiente por hoy. Me voy a organizar mi colección de cables."]
 
 def obtener_precios_regionales(app_id):
-    """Consulta precios en Chile y Argentina para comparar."""
+    """Consulta precios y asegura capturar SOLO el juego base, ignorando packs."""
     try:
-        # Consulta Chile
         url_cl = f"https://store.steampowered.com/api/appdetails?appids={app_id}&cc=cl&l=spanish"
         res_cl = requests.get(url_cl, timeout=10).json()
         
-        # Consulta Argentina
         url_ar = f"https://store.steampowered.com/api/appdetails?appids={app_id}&cc=ar&l=spanish"
         res_ar = requests.get(url_ar, timeout=10).json()
 
         if res_cl and res_cl[str(app_id)]['success']:
             data_cl = res_cl[str(app_id)]['data']
-            if data_cl.get('is_free') or 'price_overview' not in data_cl:
+            
+            # FILTRO CRÍTICO: Solo procesar si es un juego base
+            if data_cl.get('type') != 'game' or data_cl.get('is_free'):
                 return None
             
-            p_cl = data_cl['price_overview']
+            # Solo tomar el price_overview directo del app_id (Juego Base)
+            p_cl = data_cl.get('price_overview')
             
-            # FILTRO DE SEGURIDAD CHILE: ¿Hay oferta real?
-            if p_cl.get('discount_percent', 0) <= 0:
+            # Si no hay price_overview o no hay descuento real en el juego base, descartar
+            if not p_cl or p_cl.get('discount_percent', 0) <= 0:
                 return None
 
-            # Obtener precio Argentina si está disponible
+            # Obtener precio Argentina para comparar (Solo si el éxito es del mismo app_id)
             precio_ar = "N/A"
             if res_ar and res_ar[str(app_id)]['success']:
                 p_ar = res_ar[str(app_id)]['data'].get('price_overview', {})
@@ -41,7 +42,8 @@ def obtener_precios_regionales(app_id):
                 'desc': data_cl.get('short_description', 'Sin descripción.'),
                 'clp': p_cl.get('final_formatted'),
                 'ars_usd': precio_ar,
-                'descuento': p_cl.get('discount_percent')
+                'descuento': p_cl.get('discount_percent'),
+                'title': data_cl.get('name', 'Sujeto de Prueba')
             }
         return None
     except: return None
@@ -60,8 +62,6 @@ def enviar_mensaje():
                 datos = obtener_precios_regionales(o['steamAppID'])
                 if datos:
                     o.update(datos)
-                    # Aseguramos el nombre del juego para el título destacado
-                    o['game_title'] = o.get('title', 'Sujeto de Prueba')
                     o['score'] = int(o.get('metacriticScore', 0))
                     if datos['es_multi']: candidatos_multi.append(o)
                     else: candidatos_solo.append(o)
@@ -71,18 +71,17 @@ def enviar_mensaje():
     for lista in [candidatos_multi, candidatos_solo]:
         lista.sort(key=lambda x: (x['score'], x['descuento']), reverse=True)
 
-    # --- ENVÍO CON ESTÉTICA FINAL (JERARQUÍA CORREGIDA) ---
+    # --- ENVÍO CON ESTÉTICA FINAL ---
     for lista, tipo_label, emoji, frase in [
         (candidatos_multi, "RECOMENDACIÓN COOPERATIVA", "📡", FRASES_COOP[0]),
         (candidatos_solo, "EXPERIMENTO DE AISLAMIENTO", "🧬", FRASES_SOLO[0])
     ]:
         if lista:
             best = lista[0]
-            # Formato optimizado: Título para notificación -> Separador -> Nombre del Juego -> Detalles
             msg = (
                 f"# 🧪 EL PROFESOR TIENE UNA {tipo_label}\n"
                 f"----------------------------------------------------------\n"
-                f"## {emoji} {best['game_title']} {emoji}\n"
+                f"## {emoji} {best['title']} {emoji}\n"
                 f"----\n"
                 f"{frase}\n\n"
                 f"**Descripción:** {best['desc']}\n\n"
@@ -96,14 +95,13 @@ def enviar_mensaje():
             requests.post(webhook_url, json={"content": msg})
             time.sleep(2)
 
-    # --- MENCIONES DESHONROSAS (FORMATO LIMPIO) ---
+    # --- MENCIONES DESHONROSAS ---
     final = "🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n"
     final += "----------------------------------------------------------\n"
     
     for cat, l in [("📡 Otros grupales", candidatos_multi), ("🧬 Otros solitarios", candidatos_solo)]:
         if l:
             final += f"### {cat}:\n"
-            # Iteramos omitiendo el primero de cada lista (índices 1 al 4)
             for s in l[1:5]:
                 final += (
                     f"• **{s['title']}**\n"
