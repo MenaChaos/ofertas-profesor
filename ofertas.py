@@ -2,30 +2,11 @@ import requests
 import os
 import time
 import random
-import google.generativeai as genai
-
-# --- CONFIGURACIÓN DE IA (GEMINI) ---
-# Usamos la variable de entorno que configuramos en los Secrets de GitHub
-genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- CONFIGURACIÓN DE PERSONALIDAD ---
+FRASES_COOP = ["¡Atención, tripulación! Si logran cooperar mejor que Fry y Bender, podrían sobrevivir."]
+FRASES_SOLO = ["¡Ah, el dulce aislamiento! Perfecto para ignorar al resto del universo."]
 FRASES_DESPEDIDA = ["Ya hice suficiente por hoy. Me voy a organizar mi colección de cables."]
-
-def generar_resena_profesor(titulo, descripcion, modo):
-    """Usa IA para generar una reseña con la personalidad del Profesor Farnsworth."""
-    contexto = "cooperativo" if modo == "COOP" else "individual de aislamiento"
-    prompt = (
-        f"Actúa como el Profesor Hubert J. Farnsworth de Futurama. "
-        f"Escribe una reseña muy breve (máximo 3 frases) y sarcástica para el juego '{titulo}'. "
-        f"Menciona que es un experimento {contexto}. Usa sus frases típicas como '¡Buenas noticias!' o '¡Por todos los...'. "
-        f"La descripción original es: {descripcion}. Escribe SIEMPRE en español, incluso si la descripción está en inglés."
-    )
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except:
-        return f"¡Rayos! Mi detector de reseñas se quedó sin Slurm para '{titulo}', pero mi instinto dice que es un experimento aceptable."
 
 def obtener_precios_regionales(app_id):
     """Consulta precios en Chile y Argentina para comparar."""
@@ -45,33 +26,31 @@ def obtener_precios_regionales(app_id):
             
             p_cl = data_cl['price_overview']
             
-            # FILTRO DE SEGURIDAD: Solo ofertas reales
+            # FILTRO DE SEGURIDAD CHILE: ¿Hay oferta real?
             if p_cl.get('discount_percent', 0) <= 0:
                 return None
 
-            # Obtener precio Argentina (LATAM-USD)
+            # Obtener precio Argentina si está disponible
             precio_ar = "N/A"
             if res_ar and res_ar[str(app_id)]['success']:
                 p_ar = res_ar[str(app_id)]['data'].get('price_overview', {})
                 precio_ar = p_ar.get('final_formatted', 'N/A')
 
             return {
-                'title': data_cl.get('name'),
                 'es_multi': any(c['id'] in [1, 9, 38] for c in data_cl.get('categories', [])),
-                'desc_original': data_cl.get('short_description', 'Sin datos.'),
+                'desc': data_cl.get('short_description', 'Sin descripción.'),
                 'clp': p_cl.get('final_formatted'),
                 'ars_usd': precio_ar,
                 'descuento': p_cl.get('discount_percent')
             }
         return None
-    except:
-        return None
+    except: return None
 
 def enviar_mensaje():
     webhook_url = os.getenv('WEBHOOK_PROFESOR')
     candidatos_multi, candidatos_solo = [], []
     
-    # Análisis de juegos (300 juegos aprox en 5 páginas)
+    # Análisis de juegos (5 páginas)
     for pagina in range(5):
         url = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
         try:
@@ -82,32 +61,26 @@ def enviar_mensaje():
                 if datos:
                     o.update(datos)
                     o['score'] = int(o.get('metacriticScore', 0))
-                    if datos['es_multi']:
-                        candidatos_multi.append(o)
-                    else:
-                        candidatos_solo.append(o)
-                time.sleep(1.2) # Respetamos el tiempo para evitar bloqueos
-        except:
-            continue
+                    if datos['es_multi']: candidatos_multi.append(o)
+                    else: candidatos_solo.append(o)
+                time.sleep(1.2)
+        except: continue
 
-    # Ordenar por puntaje y descuento
     for lista in [candidatos_multi, candidatos_solo]:
         lista.sort(key=lambda x: (x['score'], x['descuento']), reverse=True)
 
-    # --- ENVÍO CON IA ACTIVADA ---
-    for lista, titulo_msg, emoji, modo_ia in [
-        (candidatos_multi, "RECOMENDACIÓN COOPERATIVA", "📡", "COOP"),
-        (candidatos_solo, "EXPERIMENTO DE AISLAMIENTO", "🧬", "SOLO")
+    # --- ENVÍO CON ESTÉTICA FINAL ---
+    for lista, titulo, emoji, frase in [
+        (candidatos_multi, "RECOMENDACIÓN COOPERATIVA", "📡", FRASES_COOP[0]),
+        (candidatos_solo, "EXPERIMENTO DE AISLAMIENTO", "🧬", FRASES_SOLO[0])
     ]:
         if lista:
             best = lista[0]
-            # La IA genera la reseña personalizada
-            resena_profesor = generar_resena_profesor(best['title'], best['desc_original'], modo_ia)
-            
             msg = (
-                f"# {emoji} {titulo_msg} {emoji}\n"
+                f"# {emoji} {titulo} {emoji}\n"
                 f"----------------------------------------------------------\n"
-                f"{resena_profesor}\n\n"
+                f"{frase}\n\n"
+                f"**Descripción:** {best['desc']}\n\n"
                 f"**Calibración:** ⚡ {best['score']}/100\n"
                 f"**Descuento:** 📉 {best['descuento']}%\n"
                 f"**Costo:** 💰 {best['clp']}\n"
@@ -118,15 +91,15 @@ def enviar_mensaje():
             requests.post(webhook_url, json={"content": msg})
             time.sleep(2)
 
-    # Menciones Deshonrosas (Sujetos secundarios)
-    final_info = "🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n---\n"
+    # Menciones Deshonrosas
+    final = "🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n---\n"
     for cat, l in [("📡 Otros grupales", candidatos_multi), ("🧬 Otros solitarios", candidatos_solo)]:
         if l:
-            final_info += f"**{cat}:**\n"
-            final_info += "\n".join([f"• {s['title']}: {s['clp']} (Arg: {s['ars_usd']}) -{s['descuento']}%" for s in l[1:5]]) + "\n\n"
+            final += f"**{cat}:**\n"
+            final += "\n".join([f"• {s['title']}: {s['clp']} (Arg: {s['ars_usd']}) -{s['descuento']}%" for s in l[1:5]]) + "\n\n"
     
-    final_info += f"*{FRASES_DESPEDIDA[0]}*"
-    requests.post(webhook_url, json={"content": final_info})
+    final += f"*{FRASES_DESPEDIDA[0]}*"
+    requests.post(webhook_url, json={"content": final})
 
 if __name__ == "__main__":
     enviar_mensaje()
