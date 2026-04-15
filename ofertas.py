@@ -12,11 +12,18 @@ def obtener_datos_steam(app_id):
             data = res[str(app_id)]['data']
             desc = data.get('short_description', 'Sin descripción.')
             categorias = [cat['id'] for cat in data.get('categories', [])]
-            # 1: Multi, 9: Co-op, 38: Online Co-op
             es_multi = any(id_m in categorias for id_m in [1, 9, 38])
-            return es_multi, desc
-        return None, ""
-    except: return None, ""
+            
+            # Extraemos el trailer si existe
+            video_url = ""
+            movies = data.get('movies', [])
+            if movies:
+                # Obtenemos el video en formato mp4 de alta calidad
+                video_url = movies[0].get('mp4', {}).get('max', "")
+            
+            return es_multi, desc, video_url
+        return None, "", ""
+    except: return None, "", ""
 
 def traducir_emergencia(texto):
     try:
@@ -24,10 +31,7 @@ def traducir_emergencia(texto):
     except: return texto
 
 def profesor_habla(nombre, descripcion, modo):
-    saludos = [
-        "¡Buenas noticias!", "¡Por todos los circuitos!", "¡Tripulación!",
-        "¡He inventado un buscador de gangas!", "¡Increíble!", "¡Atención!"
-    ]
+    saludos = ["¡Buenas noticias!", "¡Por todos los circuitos!", "¡Tripulación!", "¡Increíble!", "¡Atención!"]
     saludo = random.choice(saludos)
     api_key = os.getenv('GEMINI_API_KEY')
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
@@ -46,7 +50,6 @@ def profesor_habla(nombre, descripcion, modo):
 
 def enviar_mensaje():
     webhook_url = os.getenv('WEBHOOK_PROFESOR')
-    # Pedimos 100 ofertas para un análisis exhaustivo
     url_ofertas = "https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80"
     
     try:
@@ -54,22 +57,18 @@ def enviar_mensaje():
         candidatos_multi = []
         candidatos_solo = []
         
-        print(f"Analizando {len(ofertas)} posibles experimentos...")
-
-        for o in ofertas[:100]: # Analizamos hasta 100 juegos
-            es_multi, desc_steam = obtener_datos_steam(o['steamAppID'])
+        for o in ofertas[:100]:
+            es_multi, desc_steam, trailer = obtener_datos_steam(o['steamAppID'])
             if es_multi is not None:
                 o['desc'] = desc_steam
+                o['video'] = trailer
                 o['score'] = int(o['metacriticScore'])
-                o['ahorro'] = float(o['savings']) # Porcentaje de descuento
+                o['ahorro'] = float(o['savings'])
                 
                 if es_multi: candidatos_multi.append(o)
                 else: candidatos_solo.append(o)
-            
-            # 1 segundo de pausa para ser "invisibles" ante Steam
-            time.sleep(1) 
+            time.sleep(1)
 
-        # Ordenamos por Nota y luego por Ahorro (en caso de empate de nota)
         candidatos_multi.sort(key=lambda x: (x['score'], x['ahorro']), reverse=True)
         candidatos_solo.sort(key=lambda x: (x['score'], x['ahorro']), reverse=True)
 
@@ -80,6 +79,10 @@ def enviar_mensaje():
             if lista:
                 best = lista[0]
                 resena = profesor_habla(best['title'], best['desc'], modo)
+                
+                # Añadimos el trailer al final del mensaje si existe
+                link_trailer = f"\n🎬 **Tráiler del experimento:** {best['video']}" if best['video'] else ""
+                
                 mensaje = (
                     f"{emoji} **{titulo_bloque} DEL PROFESOR** {emoji}\n---\n"
                     f"{resena}\n\n"
@@ -87,6 +90,7 @@ def enviar_mensaje():
                     f"**Descuento:** 📉 {int(best['ahorro'])}%\n"
                     f"**Costo:** 💰 ${best['salePrice']} USD\n"
                     f"**Link:** https://store.steampowered.com/app/{best['steamAppID']}"
+                    f"{link_trailer}"
                 )
                 requests.post(webhook_url, json={"content": mensaje})
 
