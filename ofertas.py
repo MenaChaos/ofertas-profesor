@@ -3,55 +3,51 @@ import os
 import time
 import random
 
-# --- CONFIGURACIÓN DE PERSONALIDAD ---
+# --- PERSONALIDAD DEL PROFESOR ---
 FRASES_COOP = [
-    "¡Buenas noticias, Jenkins! He encontrado un experimento grupal. Es casi tan peligroso como aquella vez que envié a la tripulación anterior a una avispa gigante... ¡Casi!",
-    "¡Atención, tripulación! Este juego requiere trabajar en equipo. Si logran cooperar mejor que Fry y Bender cuando encuentran una moneda, ¡podrían sobrevivir!"
+    "¡Buenas noticias, Jenkins! He encontrado un experimento grupal. ¡Casi tan peligroso como la tripulación anterior!",
+    "¡Atención, tripulación! Si logran cooperar mejor que Fry y Bender, podrían sobrevivir."
 ]
 
 FRASES_SOLO = [
-    "¡Ah, el dulce aislamiento! Este juego es perfecto para ignorar al resto del universo. ¡Es como meterse en mi propia Cámara de la Muerte!",
-    "¡Buenas noticias! Este juego es individual porque nadie más soportaría sus tácticas de juego, Jenkins."
+    "¡Ah, el dulce aislamiento! Perfecto para ignorar al resto del universo.",
+    "¡Buenas noticias! Este juego es individual porque nadie más soportaría sus tácticas, Jenkins."
 ]
 
 FRASES_DESPEDIDA = [
-    "Los acompañaría a jugar, pero ya me puse la pijama.",
-    "¡En fin, me voy a dormir! Si el laboratorio explota, no me despierten."
+    "¡En fin, me voy a dormir! Si el laboratorio explota, no me despierten.",
+    "Ya hice suficiente por hoy. Me voy a organizar mi colección de cables."
 ]
 
 def obtener_datos_steam(app_id):
     """
-    Obtiene datos de Steam Chile y aplica un triple filtro de seguridad
-    para garantizar que el descuento sea REAL en la región.
+    Filtro de Seguridad 3.0: Valida ofertas reales en Chile y 
+    evita confundir packs caros con el juego base.
     """
     try:
-        # cc=cl garantiza que consultamos la base de datos de Chile directamente
         url = f"https://store.steampowered.com/api/appdetails?appids={app_id}&cc=cl&l=spanish"
         res = requests.get(url, timeout=12).json()
         
         if res and res[str(app_id)]['success']:
             data = res[str(app_id)]['data']
             
-            # 1. Verificamos que el juego no sea gratuito y tenga información de precio
+            # Verificamos que tenga datos de precio y no sea gratis
             if data.get('is_free') or 'price_overview' not in data:
                 return None, None, None
 
             price_data = data['price_overview']
             
-            # --- TRIPLE FILTRO DE SEGURIDAD ---
-            # A. ¿Hay un porcentaje de descuento reportado por Steam Chile?
-            descuento_steam = price_data.get('discount_percent', 0)
-            # B. ¿El precio final es realmente menor al inicial? (en centavos)
-            precio_final = price_data.get('final', 0)
-            precio_inicial = price_data.get('initial', 0)
-
-            if descuento_steam <= 0 or precio_final >= precio_inicial:
-                # Si no hay descuento real en Chile, el experimento se cancela
+            # --- VALIDACIÓN DE OFERTA REAL EN CHILE ---
+            # Comparamos estrictamente que el porcentaje de descuento sea > 0
+            if price_data.get('discount_percent', 0) <= 0:
                 return None, None, None
-            # ----------------------------------
+            
+            # Comparamos que el precio final sea menor al inicial (seguridad extra)
+            if price_data.get('final', 0) >= price_data.get('initial', 0):
+                return None, None, None
 
             precio_clp = price_data.get('final_formatted', 'N/A')
-            desc = data.get('short_description', 'Sin descripción disponible para este espécimen.')
+            desc = data.get('short_description', 'Sin descripción disponible.')
             
             # Clasificación Multijugador
             categorias = [cat['id'] for cat in data.get('categories', [])]
@@ -59,92 +55,69 @@ def obtener_datos_steam(app_id):
             
             return es_multi, desc, precio_clp
         return None, None, None
-    except Exception as e:
-        print(f"Error en el sensor: {e}")
+    except:
         return None, None, None
 
 def enviar_mensaje():
     webhook_url = os.getenv('WEBHOOK_PROFESOR')
-    candidatos_multi = []
-    candidatos_solo = []
+    candidatos_multi, candidatos_solo = [], []
     
-    # Escaneo de 300 juegos (5 páginas de CheapShark)
+    # Escaneamos 5 páginas de CheapShark (aprox 300 juegos)
     for pagina in range(5):
         url_ofertas = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
         try:
             ofertas = requests.get(url_ofertas).json()
-            if not ofertas: break
             for o in ofertas:
                 if not o.get('steamAppID'): continue
                 
-                # Obtener datos con el nuevo filtro de seguridad regional
+                # Validamos el precio REAL en Chile antes de considerar el juego
                 es_multi, desc, p_clp = obtener_datos_steam(o['steamAppID'])
                 
-                if p_clp: # Solo si pasó los filtros de seguridad
-                    o['desc'] = desc
-                    o['precio_clp'] = p_clp
-                    o['score'] = int(o.get('metacriticScore', 0))
-                    o['ahorro'] = float(o.get('savings', 0))
-                    
+                if p_clp: # Si pasó el filtro de oferta real
+                    o.update({
+                        'desc': desc,
+                        'precio_clp': p_clp,
+                        'score': int(o.get('metacriticScore', 0)),
+                        'ahorro': float(o.get('savings', 0))
+                    })
                     if es_multi: candidatos_multi.append(o)
                     else: candidatos_solo.append(o)
-                
-                # Pequeña pausa para no saturar la API de Steam
-                time.sleep(1.2)
+                time.sleep(1.2) # Pausa para no ser bloqueados por Steam
         except: continue
 
-    # Ordenar por calidad científica (Metacritic)
+    # Ordenamos por nota de Metacritic y luego por porcentaje de ahorro
     candidatos_multi.sort(key=lambda x: (x['score'], x['ahorro']), reverse=True)
     candidatos_solo.sort(key=lambda x: (x['score'], x['ahorro']), reverse=True)
 
-    # --- ENVÍOS SEPARADOS ---
+    # --- ENVÍO DE MENSAJES CON FORMATO CORREGIDO ---
+    for lista, modo, titulo, emoji in [
+        (candidatos_multi, "COOP", "RECOMENDACIÓN COOPERATIVA", "📡"),
+        (candidatos_solo, "SOLO", "EXPERIMENTO DE AISLAMIENTO", "🧬")
+    ]:
+        if lista:
+            best = lista[0]
+            # Título con '#' para hacerlo grande en Discord y separadores claros
+            msg = (
+                f"# {emoji} {titulo} {emoji}\n"
+                f"----------------------------------------------------------\n"
+                f"{random.choice(FRASES_COOP if modo == 'COOP' else FRASES_SOLO)}\n\n"
+                f"**Descripción:** {best['desc']}\n\n"
+                f"**Calibración:** ⚡ {best['score']}/100\n"
+                f"**Descuento:** 📉 {best['ahorro']:.0f}%\n"
+                f"**Costo:** 💰 {best['precio_clp']}\n"
+                f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}\n"
+                f"----------------------------------------------------------"
+            )
+            requests.post(webhook_url, json={"content": msg})
+            time.sleep(2)
 
-    # 1. Recomendación Cooperativa
-    if candidatos_multi:
-        best = candidatos_multi[0]
-        frase = random.choice(FRASES_COOP)
-        m_coop = (
-            f"📡 **RECOMENDACIÓN COOPERATIVA DEL PROFESOR** 📡\n"
-            f"**Descuento:** 📉 {best['ahorro']:.0f}%\n---\n"
-            f"{frase}\n\n"
-            f"**Descripción:** {best['desc']}\n\n"
-            f"**Calibración:** ⚡ {best['score']}/100\n"
-            f"**Costo:** 💰 {best['precio_clp']}\n"
-            f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}"
-        )
-        requests.post(webhook_url, json={"content": m_coop})
-        time.sleep(2)
-
-    # 2. Experimento de Aislamiento
-    if candidatos_solo:
-        best = candidatos_solo[0]
-        frase = random.choice(FRASES_SOLO)
-        m_solo = (
-            f"🧬 **EXPERIMENTO DE AISLAMIENTO DEL PROFESOR** 🧬\n"
-            f"**Descuento:** 📉 {best['ahorro']:.0f}%\n---\n"
-            f"{frase}\n\n"
-            f"**Descripción:** {best['desc']}\n\n"
-            f"**Calibración:** ⚡ {best['score']}/100\n"
-            f"**Costo:** 💰 {best['precio_clp']}\n"
-            f"**Enlace al vicio:** https://store.steampowered.com/app/{best['steamAppID']}"
-        )
-        requests.post(webhook_url, json={"content": m_solo})
-        time.sleep(2)
-
-    # 3. Menciones Deshonrosas
+    # 3. Mensaje de Menciones Finales
     final_info = "🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n---\n"
-    final_info += "He detectado otros especímenes con ofertas reales en el territorio chileno. Échenles un ojo antes de que el universo colapse.\n\n"
+    if candidatos_multi:
+        final_info += "**📡 Otros sujetos grupales:**\n" + "\n".join([f"• {s['title']}: {s['precio_clp']} (-{s['ahorro']:.0f}%)" for s in candidatos_multi[1:5]]) + "\n\n"
+    if candidatos_solo:
+        final_info += "**🧬 Otros sujetos solitarios:**\n" + "\n".join([f"• {s['title']}: {s['precio_clp']} (-{s['ahorro']:.0f}%)" for s in candidatos_solo[1:5]]) + "\n\n"
     
-    if len(candidatos_multi) > 1:
-        final_info += "**📡 Otros sujetos grupales:**\n"
-        final_info += "\n".join([f"• {s['title']}: {s['precio_clp']} (-{s['ahorro']:.0f}%)" for s in candidatos_multi[1:5]])
-        final_info += "\n\n"
-    
-    if len(candidatos_solo) > 1:
-        final_info += "**🧬 Otros sujetos solitarios:**\n"
-        final_info += "\n".join([f"• {s['title']}: {s['precio_clp']} (-{s['ahorro']:.0f}%)" for s in candidatos_solo[1:5]])
-        final_info += "\n\n"
-
     final_info += f"*{random.choice(FRASES_DESPEDIDA)}*"
     requests.post(webhook_url, json={"content": final_info})
 
