@@ -34,7 +34,7 @@ FRASES_DESPEDIDA = [
 ]
 
 def detectar_ingles(texto):
-    """Detecta si el texto está mayormente en inglés."""
+    """Detecta si el texto está mayormente en inglés basándose en palabras comunes."""
     palabras_en = {'the', 'and', 'with', 'from', 'this', 'your', 'about'}
     texto_set = set(texto.lower().split())
     return len(texto_set.intersection(palabras_en)) >= 2
@@ -77,7 +77,8 @@ def enviar_mensaje():
     candidatos_multi, candidatos_solo = [], []
     ids_vistos = set() 
     
-    for pagina in range(5):
+    # EXPLORACIÓN AMPLIADA: 10 páginas = ~600 juegos
+    for pagina in range(10):
         url = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
         try:
             ofertas = requests.get(url).json()
@@ -87,6 +88,7 @@ def enviar_mensaje():
                 
                 datos = obtener_precios_regionales(s_id)
                 if datos:
+                    # Filtro de duplicados por nombre base
                     nombre_base = datos['title'].split(':')[0].lower()
                     if nombre_base in ids_vistos: continue
                     
@@ -96,13 +98,16 @@ def enviar_mensaje():
                     
                     ids_vistos.add(s_id)
                     ids_vistos.add(nombre_base)
+                
+                # Respeto a la API de Steam (Crucial al subir el volumen)
                 time.sleep(1.2)
         except: continue
 
+    # Ordenar por puntaje de Metacritic
     for lista in [candidatos_multi, candidatos_solo]:
         lista.sort(key=lambda x: (x['score'], x['descuento']), reverse=True)
 
-    # --- RECOMENDACIONES PRINCIPALES ---
+    # --- ENVÍO DE RECOMENDACIONES ---
     for lista, tipo_label, emoji, frases_tipo in [
         (candidatos_multi, "RECOMENDACIÓN COOPERATIVA", "📡", FRASES_COOP),
         (candidatos_solo, "EXPERIMENTO DE AISLAMIENTO", "🧬", FRASES_SOLO)
@@ -111,7 +116,6 @@ def enviar_mensaje():
             best = lista[0]
             prefijo = "UNA" if "RECOMENDACIÓN" in tipo_label else "UN"
             
-            # Lógica de frases personalizada
             frase_intro = random.choice(frases_tipo)
             if detectar_ingles(best['desc']):
                 frase_intro = f"{frase_intro}\n\n⚠️ *{random.choice(FRASES_INGLES)}*"
@@ -139,6 +143,7 @@ def enviar_mensaje():
     for cat, l in [("📡 Otros grupales", candidatos_multi), ("🧬 Otros solitarios", candidatos_solo)]:
         if l:
             final += f"### {cat}:\n"
+            # Mostramos los 4 siguientes mejores después del principal
             for s in l[1:5]:
                 final += f"• **{s['title']}**\n  💰 {s['clp']}  |  🇦🇷 {s['ars_usd']}  |  📉 -{s['descuento']}%\n\n"
     
