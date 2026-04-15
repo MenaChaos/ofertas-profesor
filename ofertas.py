@@ -3,26 +3,35 @@ import os
 import time
 import random
 
-# --- CATÁLOGO DE PERSONALIDAD DEL PROFESOR ---
+# --- EL GRAN ARCHIVO DE PERSONALIDAD DEL PROFESOR ---
 FRASES_COOP = [
     "¡Atención, tripulación! Si logran cooperar mejor que Fry y Bender, podrían sobrevivir.",
     "He encontrado una simulación grupal. Intenten no matarse entre ustedes, al menos hasta que termine el experimento.",
     "¡Buenas noticias! Un software para compartir con otros sacos de carne a un precio insignificante.",
-    "¡Abran paso! He diseñado este protocolo cooperativo para que dejen de estorbar individualmente."
+    "¡Abran paso! He diseñado este protocolo cooperativo para que dejen de estorbar individualmente.",
+    "¿Cooperación? ¡Qué concepto tan primitivo! Pero aquí tienen algo para desperdiciar el tiempo en grupo.",
+    "He calibrado los sensores y detecté que necesitan interacción social. Aquí tienen su medicina.",
+    "¡Miren esto! Un juego donde pueden fracasar juntos. ¡Es casi como manejar mi laboratorio!"
 ]
 
 FRASES_SOLO = [
     "¡Ah, el dulce aislamiento! Perfecto para ignorar al resto del universo.",
     "Un experimento diseñado para un solo individuo. Ideal para quienes odian el contacto humano tanto como yo.",
     "He calibrado este juego para que nadie los moleste. ¡Váyanse de mi laboratorio!",
-    "¿Quién necesita amigos cuando tienes una simulación computarizada y un frasco de ojos de repuesto?"
+    "¿Quién necesita amigos cuando tienes una simulación computarizada y un frasco de ojos de repuesto?",
+    "¡Excelente! Un juego para personas que disfrutan de su propia compañía y del silencio absoluto.",
+    "He analizado este software y garantiza cero contacto con otros seres vivos. ¡Sublime!",
+    "Si van a estar solos, al menos asegúrense de que el software sea de alta calidad. Como este."
 ]
 
 FRASES_INGLES = [
     "¡Por las barbas de un decápodo! La descripción está en inglés. Si no la entienden, culpen al sistema educativo de este cuadrante.",
     "Mis disculpas, la base de datos está en un idioma primitivo llamado inglés. ¡Usen sus traductores cerebrales!",
     "Reseña en inglés detectada. Espero que sus implantes de lenguaje funcionen, porque no pienso traducirlo.",
-    "¡Maldición! El reporte viene en inglés. ¡Leela tú, que eres joven y tu cerebro aún no es gelatina!"
+    "¡Maldición! El reporte viene en inglés. ¡Leela tú, que eres joven y tu cerebro aún no es gelatina!",
+    "¿Inglés? ¿En serio? Mi traductor universal está en mantenimiento, así que usen su imaginación.",
+    "¡Indignante! Una descripción sin traducir. Es como si esperaran que yo hiciera todo el trabajo.",
+    "Advertencia: Texto en dialecto anglosajón. No me miren a mí, yo hablo ciencia."
 ]
 
 FRASES_DESPEDIDA = [
@@ -30,31 +39,32 @@ FRASES_DESPEDIDA = [
     "No me busquen en las próximas horas, estaré en la cámara de sueños o ignorándolos activamente.",
     "¡Adiós a todos! Me voy a mi pijama de una sola pieza.",
     "Los acompañaría a jugar, pero ya me puse la pijama.",
-    "¡Arreglen sus propios problemas! Me voy a mi cámara de gritos."
+    "¡Arreglen sus propios problemas! Me voy a mi cámara de gritos.",
+    "Me retiro. Tengo que alimentar a mis experimentos... y a Mordelón.",
+    "¡Basta de ciencia por hoy! Me voy a ver mis novelas holográficas.",
+    "Si me necesitan, estaré en el año 3000. ¡O sea, en mi cama!",
+    "¿Todavía están aquí? ¡Fuera! ¡Fuera de mi laboratorio!",
+    "Ya me cansé de buscar ofertas para sus billeteras vacías. ¡Hasta nunca!"
 ]
 
 def detectar_ingles(texto):
-    """Detecta si el texto está mayormente en inglés basándose en palabras comunes."""
-    palabras_en = {'the', 'and', 'with', 'from', 'this', 'your', 'about'}
+    palabras_en = {'the', 'and', 'with', 'from', 'this', 'your', 'about', 'world', 'game'}
     texto_set = set(texto.lower().split())
     return len(texto_set.intersection(palabras_en)) >= 2
 
 def obtener_precios_regionales(app_id):
-    """Consulta precios y extrae el nombre exacto del producto en Steam."""
     try:
         url_cl = f"https://store.steampowered.com/api/appdetails?appids={app_id}&cc=cl&l=spanish"
         res_cl = requests.get(url_cl, timeout=10).json()
-        
         url_ar = f"https://store.steampowered.com/api/appdetails?appids={app_id}&cc=ar&l=spanish"
         res_ar = requests.get(url_ar, timeout=10).json()
 
         if res_cl and res_cl[str(app_id)]['success']:
             data_cl = res_cl[str(app_id)]['data']
             if data_cl.get('is_free'): return None
-            
             p_cl = data_cl.get('price_overview')
             if not p_cl or p_cl.get('discount_percent', 0) <= 0: return None
-
+            
             precio_ar = "N/A"
             if res_ar and res_ar[str(app_id)]['success']:
                 p_ar = res_ar[str(app_id)]['data'].get('price_overview', {})
@@ -77,37 +87,29 @@ def enviar_mensaje():
     candidatos_multi, candidatos_solo = [], []
     ids_vistos = set() 
     
-    # EXPLORACIÓN AMPLIADA: 10 páginas = ~600 juegos
-    for pagina in range(10):
+    # PUNTO DULCE ALCANZADO: 12 páginas = ~720 juegos
+    for pagina in range(12):
         url = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
         try:
             ofertas = requests.get(url).json()
             for o in ofertas:
                 s_id = o.get('steamAppID')
                 if not s_id or s_id in ids_vistos: continue
-                
                 datos = obtener_precios_regionales(s_id)
                 if datos:
-                    # Filtro de duplicados por nombre base
                     nombre_base = datos['title'].split(':')[0].lower()
                     if nombre_base in ids_vistos: continue
-                    
                     datos['score'] = int(o.get('metacriticScore', 0))
                     if datos['es_multi']: candidatos_multi.append(datos)
                     else: candidatos_solo.append(datos)
-                    
                     ids_vistos.add(s_id)
                     ids_vistos.add(nombre_base)
-                
-                # Respeto a la API de Steam (Crucial al subir el volumen)
                 time.sleep(1.2)
         except: continue
 
-    # Ordenar por puntaje de Metacritic
     for lista in [candidatos_multi, candidatos_solo]:
         lista.sort(key=lambda x: (x['score'], x['descuento']), reverse=True)
 
-    # --- ENVÍO DE RECOMENDACIONES ---
     for lista, tipo_label, emoji, frases_tipo in [
         (candidatos_multi, "RECOMENDACIÓN COOPERATIVA", "📡", FRASES_COOP),
         (candidatos_solo, "EXPERIMENTO DE AISLAMIENTO", "🧬", FRASES_SOLO)
@@ -115,7 +117,6 @@ def enviar_mensaje():
         if lista:
             best = lista[0]
             prefijo = "UNA" if "RECOMENDACIÓN" in tipo_label else "UN"
-            
             frase_intro = random.choice(frases_tipo)
             if detectar_ingles(best['desc']):
                 frase_intro = f"{frase_intro}\n\n⚠️ *{random.choice(FRASES_INGLES)}*"
@@ -137,13 +138,11 @@ def enviar_mensaje():
             requests.post(webhook_url, json={"content": msg})
             time.sleep(2)
 
-    # --- MENCIONES DESHONROSAS ---
     final = "🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n"
     final += "----------------------------------------------------------\n"
     for cat, l in [("📡 Otros grupales", candidatos_multi), ("🧬 Otros solitarios", candidatos_solo)]:
         if l:
             final += f"### {cat}:\n"
-            # Mostramos los 4 siguientes mejores después del principal
             for s in l[1:5]:
                 final += f"• **{s['title']}**\n  💰 {s['clp']}  |  🇦🇷 {s['ars_usd']}  |  📉 -{s['descuento']}%\n\n"
     
