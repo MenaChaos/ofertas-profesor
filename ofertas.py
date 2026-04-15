@@ -3,40 +3,43 @@ import os
 import time
 import random
 
-# --- EL GRAN ARCHIVO DE PERSONALIDAD DEL PROFESOR ---
+# --- CATÁLOGO DE PERSONALIDAD DEL PROFESOR ---
+# (Se mantienen las frases del catálogo anterior para no abultar el código, 
+# pero están todas integradas en la lógica)
+
 FRASES_COOP = [
     "¡Atención, tripulación! Si logran cooperar mejor que Fry y Bender, podrían sobrevivir.",
-    "He encontrado una simulación grupal. Intenten no matarse entre ustedes, al menos hasta que termine el experimento.",
-    "¡Buenas noticias! Un software para compartir con otros sacos de carne a un precio insignificante.",
-    "¡Abran paso! He diseñado este protocolo cooperativo para que dejen de estorbar individualmente.",
-    "¿Cooperación? ¡Qué concepto tan primitivo! Pero aquí tienen algo para desperdiciar el tiempo en grupo.",
-    "He calibrado los sensores y detecté que necesitan interacción social. Aquí tienen su medicina.",
-    "¡Miren esto! Un juego donde pueden fracasar juntos. ¡Es casi como manejar mi laboratorio!"
+    "He encontrado una simulación grupal. Intenten no matarse entre ustedes.",
+    "¡Buenas noticias! Un software para compartir con otros sacos de carne.",
+    "¡Abran paso! Protocolo cooperativo activado para que dejen de estorbar.",
+    "¿Cooperación? ¡Qué concepto tan primitivo! Pero aquí tienen algo para perder el tiempo.",
+    "He detectado que necesitan interacción social. Aquí tienen su medicina.",
+    "¡Miren esto! Un juego donde pueden fracasar juntos. ¡Como mi laboratorio!"
 ]
 
 FRASES_SOLO = [
     "¡Ah, el dulce aislamiento! Perfecto para ignorar al resto del universo.",
-    "Un experimento diseñado para un solo individuo. Ideal para quienes odian el contacto humano tanto como yo.",
+    "Experimento para un solo individuo. Ideal para quienes odian el contacto humano.",
     "He calibrado este juego para que nadie los moleste. ¡Váyanse de mi laboratorio!",
-    "¿Quién necesita amigos cuando tienes una simulación computarizada y un frasco de ojos de repuesto?",
-    "¡Excelente! Un juego para personas que disfrutan de su propia compañía y del silencio absoluto.",
-    "He analizado este software y garantiza cero contacto con otros seres vivos. ¡Sublime!",
-    "Si van a estar solos, al menos asegúrense de que el software sea de alta calidad. Como este."
+    "¿Quién necesita amigos cuando tienes una simulación y un frasco de ojos de repuesto?",
+    "¡Excelente! Un juego para personas que disfrutan de su propia compañía.",
+    "He analizado este software y garantiza cero contacto con otros seres vivos.",
+    "Si van a estar solos, al menos asegúrense de que el software sea de alta calidad."
 ]
 
 FRASES_INGLES = [
-    "¡Por las barbas de un decápodo! La descripción está en inglés. Si no la entienden, culpen al sistema educativo de este cuadrante.",
-    "Mis disculpas, la base de datos está en un idioma primitivo llamado inglés. ¡Usen sus traductores cerebrales!",
-    "Reseña en inglés detectada. Espero que sus implantes de lenguaje funcionen, porque no pienso traducirlo.",
-    "¡Maldición! El reporte viene en inglés. ¡Leela tú, que eres joven y tu cerebro aún no es gelatina!",
-    "¿Inglés? ¿En serio? Mi traductor universal está en mantenimiento, así que usen su imaginación.",
-    "¡Indignante! Una descripción sin traducir. Es como si esperaran que yo hiciera todo el trabajo.",
+    "¡Por las barbas de un decápodo! La descripción está en inglés. Culpen al sistema educativo.",
+    "Mis disculpas, la base de datos está en un idioma primitivo llamado inglés.",
+    "Reseña en inglés detectada. Espero que sus implantes de lenguaje funcionen.",
+    "¡Maldición! El reporte viene en inglés. ¡Leela tú, que tu cerebro aún no es gelatina!",
+    "¿Inglés? Mi traductor universal está en mantenimiento, usen su imaginación.",
+    "¡Indignante! Una descripción sin traducir. Es como si esperaran que yo hiciera todo.",
     "Advertencia: Texto en dialecto anglosajón. No me miren a mí, yo hablo ciencia."
 ]
 
 FRASES_DESPEDIDA = [
     "Ya hice suficiente por hoy. Me voy a organizar mi colección de cables.",
-    "No me busquen en las próximas horas, estaré en la cámara de sueños o ignorándolos activamente.",
+    "No me busquen, estaré en la cámara de sueños o ignorándolos activamente.",
     "¡Adiós a todos! Me voy a mi pijama de una sola pieza.",
     "Los acompañaría a jugar, pero ya me puse la pijama.",
     "¡Arreglen sus propios problemas! Me voy a mi cámara de gritos.",
@@ -87,26 +90,45 @@ def enviar_mensaje():
     candidatos_multi, candidatos_solo = [], []
     ids_vistos = set() 
     
-    # PUNTO DULCE ALCANZADO: 12 páginas = ~720 juegos
-    for pagina in range(12):
+    print("🧪 INICIANDO ESCANEO DE LARGO ALCANCE (900 JUEGOS)...")
+    
+    # EXPLORACIÓN MÁXIMA: 15 páginas = ~900 juegos
+    for pagina in range(15):
         url = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
         try:
-            ofertas = requests.get(url).json()
+            res = requests.get(url)
+            ofertas = res.json()
+            
+            # TELEMETRÍA: Verificamos cuántas ofertas entrega la API en esta página
+            print(f"📡 Página {pagina}: Analizando {len(ofertas)} ofertas encontradas...")
+            
+            if not ofertas:
+                print(f"⚠️ La página {pagina} está vacía. Finalizando búsqueda.")
+                break
+
             for o in ofertas:
                 s_id = o.get('steamAppID')
                 if not s_id or s_id in ids_vistos: continue
+                
                 datos = obtener_precios_regionales(s_id)
                 if datos:
                     nombre_base = datos['title'].split(':')[0].lower()
                     if nombre_base in ids_vistos: continue
+                    
                     datos['score'] = int(o.get('metacriticScore', 0))
                     if datos['es_multi']: candidatos_multi.append(datos)
                     else: candidatos_solo.append(datos)
+                    
                     ids_vistos.add(s_id)
                     ids_vistos.add(nombre_base)
                 time.sleep(1.2)
-        except: continue
+        except Exception as e:
+            print(f"❌ Error en página {pagina}: {e}")
+            continue
 
+    print(f"✅ Escaneo finalizado. Candidatos encontrados: {len(candidatos_multi) + len(candidatos_solo)}")
+
+    # Ordenar y enviar (Lógica idéntica a la anterior)
     for lista in [candidatos_multi, candidatos_solo]:
         lista.sort(key=lambda x: (x['score'], x['descuento']), reverse=True)
 
