@@ -3,92 +3,73 @@ import os
 import random
 import time
 
-def generar_resena_ia(nombre_juego):
+def obtener_datos_steam(app_id):
+    """ Obtiene descripción y categorías de Steam """
+    try:
+        url = f"https://store.steampowered.com/api/appdetails?appids={app_id}&l=spanish"
+        res = requests.get(url).json()
+        if res and res[str(app_id)]['success']:
+            data = res[str(app_id)]['data']
+            desc = data.get('short_description', 'Un juego misterioso.')
+            cats = [cat['id'] for cat in data.get('categories', [])]
+            es_multi = any(id_m in cats for id_m in [1, 9, 38])
+            return es_multi, desc
+        return False, ""
+    except: return False, ""
+
+def profesor_traductor(nombre, descripcion_steam):
+    """ Usa la IA para traducir la descripción de Steam al estilo Farnsworth """
     api_key = os.getenv('GEMINI_API_KEY')
+    if not api_key: return descripcion_steam
+
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    prompt = (
+        f"Eres el Profesor Farnsworth de Futurama. Traduce esta descripción de un juego a tu estilo "
+        f"sarcástico y loco. Empieza con '¡Buenas noticias!'. No uses más de 3 líneas. "
+        f"Juego: {nombre}. Descripción: {descripcion_steam}"
+    )
     
-    # Instrucción ultra-directa
-    prompt_text = f"Escribe un mensaje corto como el Profesor Farnsworth de Futurama sobre el juego {nombre_juego}. Empieza con '¡Buenas noticias!'. Explica por qué es divertido jugar con amigos. Máximo 50 palabras."
-    
-    payload = {
-        "contents": [{
-            "parts": [{"text": prompt_text}]
-        }],
-        "safetySettings": [ # Esto desactiva filtros que podrían estar bloqueando la respuesta
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-        ]
-    }
-
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
     try:
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, timeout=15)
         res = response.json()
-        
-        # Imprimimos la respuesta en el log de GitHub por si vuelve a fallar
-        print(f"Respuesta IA: {res}") 
-        
-        if 'candidates' in res and len(res['candidates']) > 0:
-            return res['candidates'][0]['content']['parts'][0]['text']
-    except Exception as e:
-        print(f"Error crítico: {e}")
-        
-    return "¡Buenas noticias! He encontrado un juego excelente, pero mi transmisor interplanetario está fallando. ¡Confíen en mi intelecto y jueguen esto!"
+        return res['candidates'][0]['content']['parts'][0]['text']
+    except:
+        # Si la IA falla, devolvemos la descripción de Steam para no quedar en blanco
+        return f"¡Buenas noticias! Mi cerebro falló, pero Steam dice esto: {descripcion_steam}"
 
-def es_multijugador(app_id):
-    try:
-        url = f"https://store.steampowered.com/api/appdetails?appids={app_id}"
-        response = requests.get(url)
-        data = response.json()
-        if data and data[str(app_id)]['success']:
-            info = data[str(app_id)]['data']
-            categorias = [cat['id'] for cat in info.get('categories', [])]
-            return any(id_multi in categorias for id_multi in [1, 9, 38])
-        return False
-    except: return False
-
-def buscar_la_mejor_evaluada():
-    url_api = "https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80"
-    try:
-        response = requests.get(url_api)
-        ofertas = response.json()
-        candidatos_multi = []
-        for juego in ofertas[:20]:
-            if es_multijugador(juego['steamAppID']):
-                juego['score_float'] = float(juego['metacriticScore'])
-                candidatos_multi.append(juego)
-            time.sleep(0.6)
-        
-        if not candidatos_multi: return None
-        candidatos_multi.sort(key=lambda x: x['score_float'], reverse=True)
-        return candidatos_multi[0]
-    except: return None
+def buscar_mejor_oferta():
+    url = "https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80"
+    ofertas = requests.get(url).json()
+    candidatos = []
+    
+    for o in ofertas[:15]:
+        es_multi, desc = obtener_datos_steam(o['steamAppID'])
+        if es_multi:
+            o['descripcion'] = desc
+            o['score'] = float(o['metacriticScore'])
+            candidatos.append(o)
+        time.sleep(0.5)
+    
+    if not candidatos: return None
+    candidatos.sort(key=lambda x: x['score'], reverse=True)
+    return candidatos[0]
 
 def enviar_mensaje():
-    webhook_url = os.getenv('WEBHOOK_PROFESOR')
-    # El Profesor se toma su tiempo para analizar
-    juego = buscar_la_mejor_evaluada()
+    webhook = os.getenv('WEBHOOK_PROFESOR')
+    juego = buscar_mejor_oferta()
     
     if juego:
-        print(f"Juego encontrado: {juego['title']}. Generando reseña de alta calidad...")
-        resena = generar_resena_ia(juego['title'])
+        # El Profesor traduce la descripción real
+        resena = profesor_traductor(juego['title'], juego['descripcion'])
         
-        link = f"https://store.steampowered.com/app/{juego['steamAppID']}"
-        precio = juego['salePrice']
-        nota = juego['metacriticScore']
-        
-        mensaje_final = (
+        mensaje = (
             f"{resena}\n\n"
-            f"**Calificación Crítica:** ⭐ {nota}/100\n"
-            f"**Precio de Ganga:** ${precio} USD\n"
-            f"**Link para el vicio:** {link}"
+            f"**Nota:** ⭐ {juego['metacriticScore']}/100\n"
+            f"**Precio:** ${juego['salePrice']} USD\n"
+            f"**Link:** https://store.steampowered.com/app/{juego['steamAppID']}"
         )
-        
-        payload = {"content": mensaje_final}
-        requests.post(webhook_url, json=payload)
-    else:
-        print("Hoy no encontré nada digno de mi intelecto.")
+        requests.post(webhook, json={"content": mensaje})
 
 if __name__ == "__main__":
     enviar_mensaje()
