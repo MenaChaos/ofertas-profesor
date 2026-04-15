@@ -3,8 +3,8 @@ import os
 import random
 import time
 
-def obtener_calificacion_steam(app_id):
-    """ Obtiene las categorías y la calificación (si es posible) de Steam """
+def es_multijugador(app_id):
+    """ Verifica en la API de Steam si el juego tiene categorías de multijugador """
     try:
         url = f"https://store.steampowered.com/api/appdetails?appids={app_id}"
         response = requests.get(url)
@@ -12,49 +12,40 @@ def obtener_calificacion_steam(app_id):
         
         if data and data[str(app_id)]['success']:
             info = data[str(app_id)]['data']
-            # Verificamos si es Multi-player (1), Co-op (9) u Online Co-op (38)
             categorias = [cat['id'] for cat in info.get('categories', [])]
-            es_multi = any(id_multi in categorias for id_multi in [1, 9, 38])
-            
-            # Si no es multi, devolvemos 0 para descartarlo
-            if not es_multi:
-                return 0
-            
-            # Devolvemos el porcentaje de ahorro de CheapShark como puntaje
-            return es_multi
+            # 1: Multi-player, 9: Co-op, 38: Online Co-op
+            return any(id_multi in categorias for id_multi in [1, 9, 38])
         return False
     except:
         return False
 
-def buscar_la_mejor_oferta():
-    # Buscamos ofertas potentes (descuento > 70% y nota Metacritic > 70)
-    url_api = "https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=15&onSale=1&metacritic=70"
+def buscar_la_mejor_evaluada():
+    # Buscamos ofertas (descuento > 50% y nota Metacritic > 75 para asegurar calidad)
+    url_api = "https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=15&onSale=1&metacritic=75"
     
     try:
         response = requests.get(url_api)
         ofertas = response.json()
         
         candidatos_multi = []
+        print("Buscando la joya multijugador con mejor crítica...")
         
-        print("Analizando ofertas para encontrar la mejor opción multijugador...")
-        
-        # Revisamos los primeros 25 resultados para no demorar horas
+        # Analizamos los primeros 25 resultados
         for juego in ofertas[:25]:
-            if obtener_calificacion_steam(juego['steamAppID']):
-                # Guardamos el juego junto con su porcentaje de ahorro (savings) para comparar
-                juego['savings_float'] = float(juego['savings'])
+            if es_multijugador(juego['steamAppID']):
+                # Guardamos el puntaje de Metacritic para comparar
+                juego['score_float'] = float(juego['metacriticScore'])
                 candidatos_multi.append(juego)
-                print(f"Candidato encontrado: {juego['title']} ({juego['savings']}% ahorro)")
+                print(f"Analizado: {juego['title']} - Nota: {juego['metacriticScore']}")
             
-            time.sleep(0.6) # Respiro para la API de Steam
+            time.sleep(0.6) # Evitar bloqueo de Steam
 
         if not candidatos_multi:
             return None
 
-        # ORDENAR: El que tenga mayor porcentaje de ahorro (savings) va primero
-        candidatos_multi.sort(key=lambda x: x['savings_float'], reverse=True)
+        # ORDENAR: El que tenga mayor Metascore (nota) va primero
+        candidatos_multi.sort(key=lambda x: x['score_float'], reverse=True)
         
-        # Devolvemos el número 1 de la lista (la mejor oferta)
         return candidatos_multi[0]
 
     except Exception as e:
@@ -65,25 +56,25 @@ def enviar_mensaje():
     webhook_url = os.getenv('WEBHOOK_PROFESOR')
     if not webhook_url: return
 
-    juego = buscar_la_mejor_oferta()
+    juego = buscar_la_mejor_evaluada()
     
     if juego:
         nombre = juego['title']
-        precio_oferta = juego['salePrice']
-        ahorro = round(juego['savings_float'])
+        precio = juego['salePrice']
+        nota = juego['metacriticScore']
         link = f"https://store.steampowered.com/app/{juego['steamAppID']}"
         
         frases = [
-            f"¡Buenas noticias! He analizado todas las ofertas y la ganadora absoluta es **{nombre}**. ¡Un ahorro del **{ahorro}%**! Solo ${precio_oferta} por un gran cooperativo.",
-            f"¡Grandes noticias! Después de descartar juegos mediocres, he hallado esta joya multi: **{nombre}**. Bajó un **{ahorro}%**, ¡quedó a solo ${precio_oferta}!",
-            f"¡Atención, carnes con ojos! He optimizado mi búsqueda y **{nombre}** es la oferta más eficiente del día. **{ahorro}%** de descuento. ¡Cómprelo antes de que me arrepienta!"
+            f"¡Buenas noticias! He encontrado una obra maestra: **{nombre}**. Tiene una nota de **{nota}** en Metacritic y está a solo ${precio}. ¡Es multijugador!",
+            f"¡Grandes noticias! Si buscan calidad, **{nombre}** es el mejor evaluado hoy (Nota: **{nota}**). ¡Un regalo por ${precio}!",
+            f"¡Atención! He ignorado la basura barata y me quedé con esto: **{nombre}**. Nota: **{nota}**. Ideal para gente de gusto refinado como Los Jenkins."
         ]
         
         data = {"content": f"{random.choice(frases)}\n{link}"}
         requests.post(webhook_url, json=data)
-        print(f"Mejor oferta enviada: {nombre} con {ahorro}% de ahorro.")
+        print(f"Enviado el mejor evaluado: {nombre} (Nota: {nota})")
     else:
-        print("No se encontró ninguna oferta multijugador que valga la pena hoy.")
+        print("No pillé nada de alta calidad hoy.")
 
 if __name__ == "__main__":
     enviar_mensaje()
