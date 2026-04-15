@@ -126,16 +126,23 @@ def enviar_mensaje():
 
     # 3. Menciones Deshonrosas y Despedida
     final_info = "🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n---\n"
+    final_info += "¡Atención! He detectado otros experimentos con una tasa de éxito alarmantemente alta. Son juegos en oferta que merecen que les echen un ojo antes de que el universo colapse o yo olvide dónde dejé mis lentes.\n\n"
     
     if len(candidatos_multi) > 1:
-        sec_m = ", ".join([f"{s['title']} ({s['score']}/100)" for s in candidatos_multi[1:5]])
-        final_info += f"*Otros especímenes grupales:* {sec_m}\n"
+        final_info += "**📡 Otros especímenes grupales:**\n"
+        menciones_m = []
+        for s in candidatos_multi[1:5]:
+            menciones_m.append(f"• {s['title']}: ${s['salePrice']} USD (-{s['ahorro']:.0f}%)")
+        final_info += "\n".join(menciones_m) + "\n\n"
     
     if len(candidatos_solo) > 1:
-        sec_s = ", ".join([f"{s['title']} ({s['score']}/100)" for s in candidatos_solo[1:5]])
-        final_info += f"*Otros especímenes solitarios:* {sec_s}\n"
+        final_info += "**🧬 Otros especímenes solitarios:**\n"
+        menciones_s = []
+        for s in candidatos_solo[1:5]:
+            menciones_s.append(f"• {s['title']}: ${s['salePrice']} USD (-{s['ahorro']:.0f}%)")
+        final_info += "\n".join(menciones_s) + "\n\n"
 
-    final_info += f"\n*{random.choice(FRASES_DESPEDIDA)}*"
+    final_info += f"*{random.choice(FRASES_DESPEDIDA)}*"
     requests.post(webhook_url, json={"content": final_info})
 
 if __name__ == "__main__":
