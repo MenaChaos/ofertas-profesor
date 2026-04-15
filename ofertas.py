@@ -11,6 +11,7 @@ def obtener_datos_steam(app_id):
             data = res[str(app_id)]['data']
             desc = data.get('short_description', 'Sin descripción.')
             categorias = [cat['id'] for cat in data.get('categories', [])]
+            # Categorías: 1 (Multiplayer), 9 (Co-op), 38 (Online Co-op)
             es_multi = any(id_m in categorias for id_m in [1, 9, 38])
             return es_multi, desc
         return False, ""
@@ -25,8 +26,13 @@ def profesor_habla(nombre, descripcion):
     api_key = os.getenv('GEMINI_API_KEY')
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
-    # Intentamos que la IA lo haga con un prompt ultra simple
-    prompt = f"Traduce esto al español como el Profesor Farnsworth de Futurama: {descripcion}"
+    # Prompt ajustado para que el Profesor sepa que es una recomendación cooperativa
+    prompt = (
+        f"Actúa como el Profesor Farnsworth de Futurama. "
+        f"Escribe una reseña corta y sarcástica para el juego '{nombre}'. "
+        f"Es un juego cooperativo/multijugador para jugar con amigos. "
+        f"Traduce o resume esta descripción al español: {descripcion}"
+    )
     
     try:
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -36,9 +42,8 @@ def profesor_habla(nombre, descripcion):
             return res['candidates'][0]['content']['parts'][0]['text']
     except: pass
     
-    # SI LA IA FALLA, EL TRADUCTOR ENTRA AL RESCATE
     desc_es = traducir_emergencia(descripcion)
-    return f"¡Buenas noticias! Mi cerebro biónico falló, pero traduje esto para ustedes: {desc_es}"
+    return f"¡Buenas noticias! Mi cerebro falló, pero traduje esto para ustedes: {desc_es}"
 
 def enviar_mensaje():
     webhook_url = os.getenv('WEBHOOK_PROFESOR')
@@ -49,11 +54,16 @@ def enviar_mensaje():
         es_multi, desc_steam = obtener_datos_steam(o['steamAppID'])
         if es_multi:
             resena = profesor_habla(o['title'], desc_steam)
+            
+            # Formateo del mensaje con etiquetas claras
             mensaje = (
-                f"{resena}\n\n"
-                f"**Nota:** ⭐ {o['metacriticScore']}/100\n"
-                f"**Precio:** ${o['salePrice']} USD\n"
-                f"**Link:** https://store.steampowered.com/app/{o['steamAppID']}"
+                f"📡 **RECOMENDACIÓN COOPERATIVA DEL PROFESOR** 📡\n"
+                f"---"
+                f"\n{resena}\n\n"
+                f"**Tipo de experimento:** 🎮 Multijugador / Cooperativo\n"
+                f"**Nota de los críticos:** ⭐ {o['metacriticScore']}/100\n"
+                f"**Costo de los materiales:** ${o['salePrice']} USD\n"
+                f"**Enlace al vicio:** https://store.steampowered.com/app/{o['steamAppID']}"
             )
             requests.post(webhook_url, json={"content": mensaje})
             return 
