@@ -2,9 +2,9 @@ name: Ofertas del Profesor
 
 on:
   schedule:
-    # 00:40 UTC es 20:40 en Chile (UTC-4)
+    # Se ejecuta a las 00:40 UTC (20:40 hora Chile UTC-4)
     - cron: '40 0 * * *'
-  workflow_dispatch: # Esto te permite seguir probándolo manualmente
+  workflow_dispatch: # Permite seguir probando manualmente
 
 jobs:
   build:
@@ -19,10 +19,9 @@ jobs:
           python-version: '3.9'
 
       - name: Instalar librerías
-        run: pip install requests deep-translator
+        run: pip install requests
 
       - name: Ejecutar script del Profesor
         env:
           WEBHOOK_PROFESOR: ${{ secrets.WEBHOOK_PROFESOR }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python ofertas.py
