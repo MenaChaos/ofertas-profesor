@@ -2,8 +2,8 @@ name: Ofertas del Profesor
 
 on:
   schedule:
-    # Se ejecuta a las 00:40 UTC (20:40 hora Chile UTC-4)
-    - cron: '40 0 * * *'
+    # Se ejecuta a las 22:00 UTC (18:00 hora Chile UTC-4)
+    - cron: '0 22 * * *'
   workflow_dispatch: # Permite seguir probando manualmente
 
 jobs:
