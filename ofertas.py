@@ -2,7 +2,7 @@ import requests
 import os
 import time
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- CATÁLOGO DE PERSONALIDAD DEL PROFESOR ---
 FRASES_COOP = [
@@ -48,6 +48,37 @@ FRASES_DESPEDIDA = [
     "Ya me cansé de buscar ofertas para sus billeteras vacías. ¡Hasta nunca!"
 ]
 
+# --- NUEVA LÓGICA DE MEMORIA (14 DÍAS) ---
+HISTORIAL_FILE = "historial.txt"
+
+def gestionar_historial(nuevos_ids=[]):
+    ahora = datetime.now()
+    limite = ahora - timedelta(days=14)
+    registros_validos = []
+    ids_en_historial = set()
+
+    if os.path.exists(HISTORIAL_FILE):
+        with open(HISTORIAL_FILE, "r") as f:
+            for linea in f:
+                try:
+                    app_id, fecha_str = linea.strip().split(",")
+                    fecha_reg = datetime.strptime(fecha_str, "%Y-%m-%d")
+                    if fecha_reg > limite:
+                        registros_validos.append(linea.strip())
+                        ids_en_historial.add(app_id)
+                except: continue
+
+    if not nuevos_ids:
+        return ids_en_historial
+
+    fecha_hoy = ahora.strftime("%Y-%m-%d")
+    for nid in nuevos_ids:
+        if str(nid) not in ids_en_historial:
+            registros_validos.append(f"{nid},{fecha_hoy}")
+    
+    with open(HISTORIAL_FILE, "w") as f:
+        f.write("\n".join(registros_validos) + "\n")
+
 def detectar_ingles(texto):
     palabras_en = {'the', 'and', 'with', 'from', 'this', 'your', 'about', 'world', 'game'}
     texto_set = set(texto.lower().split())
@@ -58,29 +89,26 @@ def obtener_precios_regionales(app_id):
         url_cl = f"https://store.steampowered.com/api/appdetails?appids={app_id}&cc=cl&l=spanish"
         res_cl = requests.get(url_cl, timeout=10).json()
         
-        url_ar = f"https://store.steampowered.com/api/appdetails?appids={app_id}&cc=ar&l=spanish"
-        res_ar = requests.get(url_ar, timeout=10).json()
-
         if res_cl and res_cl[str(app_id)]['success']:
             data_cl = res_cl[str(app_id)]['data']
             
-            # --- NUEVO FILTRO DE FECHA (MÁXIMO 6 AÑOS) ---
+            # FILTRO DE FECHA (MÁXIMO 6 AÑOS)
             release_info = data_cl.get('release_date', {})
             date_str = release_info.get('date', '')
             if date_str:
                 try:
-                    # Extraemos el año (últimos 4 dígitos del string de fecha)
                     year_release = int(date_str.split()[-1])
                     current_year = datetime.now().year
                     if (current_year - year_release) > 6:
-                        return None # Si es más viejo de 6 años, lo descartamos
-                except:
-                    pass # Si el formato es raro (ej. "TBA"), lo dejamos pasar
+                        return None
+                except: pass
 
             if data_cl.get('is_free'): return None
             p_cl = data_cl.get('price_overview')
             if not p_cl or p_cl.get('discount_percent', 0) <= 0: return None
 
+            url_ar = f"https://store.steampowered.com/api/appdetails?appids={app_id}&cc=ar&l=spanish"
+            res_ar = requests.get(url_ar, timeout=10).json()
             precio_ar = "N/A"
             if res_ar and res_ar[str(app_id)]['success']:
                 p_ar = res_ar[str(app_id)]['data'].get('price_overview', {})
@@ -96,31 +124,30 @@ def obtener_precios_regionales(app_id):
                 'id': app_id
             }
         return None
-    except:
-        return None
+    except: return None
 
 def enviar_mensaje():
     webhook_url = os.getenv('WEBHOOK_PROFESOR')
     candidatos_multi, candidatos_solo = [], []
     ids_vistos = set()
+    
+    # Cargar juegos bloqueados por historial
+    bloqueados_historial = gestionar_historial()
 
-    print("🚀 INICIANDO ESCANEO DE LARGO ALCANCE (900 JUEGOS)...")
+    print(f"🚀 INICIANDO ESCANEO DE LARGO ALCANCE (900 JUEGOS)...")
 
     for pagina in range(15):
         url = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
         try:
             res = requests.get(url)
             ofertas = res.json()
-            
-            print(f"🕵️ Página {pagina}: Analizando {len(ofertas)} ofertas encontradas...")
-
-            if not ofertas:
-                print(f"⚠️ La página {pagina} está vacía. Finalizando búsqueda.")
-                break
+            if not ofertas: break
 
             for o in ofertas:
                 s_id = o.get('steamAppID')
-                if not s_id or s_id in ids_vistos: continue
+                # Filtro de duplicados y MEMORIA DE 14 DÍAS
+                if not s_id or s_id in ids_vistos or str(s_id) in bloqueados_historial:
+                    continue
 
                 datos = obtener_precios_regionales(s_id)
                 if datos:
@@ -135,14 +162,12 @@ def enviar_mensaje():
                     ids_vistos.add(nombre_base)
                 
                 time.sleep(1.2)
-        except Exception as e:
-            print(f"❌ Error en página {pagina}: {e}")
-            continue
-
-    print(f"✅ Escaneo finalizado. Candidatos encontrados: {len(candidatos_multi) + len(candidatos_solo)}")
+        except: continue
 
     for lista in [candidatos_multi, candidatos_solo]:
         lista.sort(key=lambda x: (x['score'], x['descuento']), reverse=True)
+
+    ids_a_registrar = []
 
     for lista, tipo_label, emoji, frases_tipo in [
         (candidatos_multi, "RECOMENDACIÓN COOPERATIVA", "🐀", FRASES_COOP),
@@ -150,6 +175,7 @@ def enviar_mensaje():
     ]:
         if lista:
             best = lista[0]
+            ids_a_registrar.append(best['id'])
             prefijo = "UNA" if "RECOMENDACIÓN" in tipo_label else "UN"
             frase_intro = random.choice(frases_tipo)
 
@@ -175,15 +201,23 @@ def enviar_mensaje():
 
     final = "# 🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n"
     final += "----------------------------------------------------------\n"
-    for cat, l in [("👥 Otros grupales", candidatos_multi), ("🌌 Otros solitarios", candidatos_solo)]:
-        if l:
+    hay_menciones = False
+    for cat, l in [("👥 Otros grupales", candidatos_multi), ("🚀 Otros solitarios", candidatos_solo)]:
+        if len(l) > 1:
+            hay_menciones = True
             final += f"### {cat}:\n"
             for s in l[1:5]:
                 final += f"• **{s['title']}** | CL {s['clp']} | AR {s['ars_usd']} | 📉 -{s['descuento']}%\n"
+                ids_a_registrar.append(s['id'])
     
-    final += "----------------------------------------------------------\n"
-    final += f"*{random.choice(FRASES_DESPEDIDA)}*"
-    requests.post(webhook_url, json={"content": final})
+    if hay_menciones:
+        final += "----------------------------------------------------------\n"
+        final += f"*{random.choice(FRASES_DESPEDIDA)}*"
+        requests.post(webhook_url, json={"content": final})
+
+    # Guardar nuevos hallazgos en la bitácora
+    if ids_a_registrar:
+        gestionar_historial(ids_a_registrar)
 
 if __name__ == "__main__":
     enviar_mensaje()
