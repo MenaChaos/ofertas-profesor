@@ -75,7 +75,7 @@ def gestionar_historial(nuevos_ids=[]):
     for nid in nuevos_ids:
         if str(nid) not in ids_en_historial:
             registros_validos.append(f"{nid},{fecha_hoy}")
-    
+
     with open(HISTORIAL_FILE, "w") as f:
         f.write("\n".join(registros_validos) + "\n")
 
@@ -88,11 +88,11 @@ def obtener_precios_regionales(app_id):
     try:
         url_cl = f"https://store.steampowered.com/api/appdetails?appids={app_id}&cc=cl&l=spanish"
         res_cl = requests.get(url_cl, timeout=10).json()
-        
+
         if res_cl and res_cl[str(app_id)]['success']:
             data_cl = res_cl[str(app_id)]['data']
-            
-            # FILTRO DE FECHA (MÁXIMO 6 AÑOS)
+
+            # --- FILTRO DE FECHA (MÁXIMO 6 AÑOS) ---
             release_info = data_cl.get('release_date', {})
             date_str = release_info.get('date', '')
             if date_str:
@@ -123,15 +123,15 @@ def obtener_precios_regionales(app_id):
                 'title': data_cl.get('name', 'Sujeto de Prueba'),
                 'id': app_id
             }
-        return None
-    except: return None
+    except: pass
+    return None
 
 def enviar_mensaje():
     webhook_url = os.getenv('WEBHOOK_PROFESOR')
     candidatos_multi, candidatos_solo = [], []
     ids_vistos = set()
     
-    # Cargar juegos bloqueados por historial
+    # Cargar historial para omitir repetidos (Memoria 14 días)
     bloqueados_historial = gestionar_historial()
 
     print(f"🚀 INICIANDO ESCANEO DE LARGO ALCANCE (900 JUEGOS)...")
@@ -145,7 +145,6 @@ def enviar_mensaje():
 
             for o in ofertas:
                 s_id = o.get('steamAppID')
-                # Filtro de duplicados y MEMORIA DE 14 DÍAS
                 if not s_id or s_id in ids_vistos or str(s_id) in bloqueados_historial:
                     continue
 
@@ -202,12 +201,15 @@ def enviar_mensaje():
     final = "# 🧪 **MENCIONES DESHONROSAS (SUJETOS SECUNDARIOS)**\n"
     final += "----------------------------------------------------------\n"
     hay_menciones = False
-    for cat, l in [("👥 Otros grupales", candidatos_multi), ("🚀 Otros solitarios", candidatos_solo)]:
+    
+    # --- REPARACIÓN DE BANDERAS Y EMOJIS EN MENCIONES ---
+    for cat, l, cat_emoji in [("Otros grupales", candidatos_multi, "👥"), ("Otros solitarios", candidatos_solo, "🚀")]:
         if len(l) > 1:
             hay_menciones = True
-            final += f"### {cat}:\n"
+            final += f"### {cat_emoji} {cat}:\n"
             for s in l[1:5]:
-                final += f"• **{s['title']}** | CL {s['clp']} | AR {s['ars_usd']} | 📉 -{s['descuento']}%\n"
+                # Sintaxis corregida con f-string para renderizar banderas
+                final += f"• **{s['title']}** | 🇨🇱 {s['clp']} | 🇦🇷 {s['ars_usd']} | 📉 -{s['descuento']}%\n"
                 ids_a_registrar.append(s['id'])
     
     if hay_menciones:
@@ -215,7 +217,7 @@ def enviar_mensaje():
         final += f"*{random.choice(FRASES_DESPEDIDA)}*"
         requests.post(webhook_url, json={"content": final})
 
-    # Guardar nuevos hallazgos en la bitácora
+    # Guardar hallazgos en bitácora
     if ids_a_registrar:
         gestionar_historial(ids_a_registrar)
 
