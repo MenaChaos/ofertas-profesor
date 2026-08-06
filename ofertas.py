@@ -163,6 +163,7 @@ def enviar_mensaje():
             print(f"🔎 Probando página {pagina} - Respuesta HTTP: {res.status_code}")
             
             if res.status_code != 200:
+                print(f"⚠️ Detalle del error {res.status_code}: {res.text}")
                 continue
 
             ofertas = res.json()
