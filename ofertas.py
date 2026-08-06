@@ -150,9 +150,16 @@ def enviar_mensaje():
     }
 
     for pagina in range(15):
-        url = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
+        url = "https://www.cheapshark.com/api/1.0/deals"
+        params = {
+            "storeID": "1",
+            "upperPrice": "20",
+            "onSale": "1",
+            "pageNumber": str(pagina)
+        }
+        
         try:
-            res = requests.get(url, headers=headers, timeout=10)
+            res = requests.get(url, headers=headers, params=params, timeout=10)
             print(f"🔎 Probando página {pagina} - Respuesta HTTP: {res.status_code}")
             
             if res.status_code != 200:
@@ -164,6 +171,11 @@ def enviar_mensaje():
                 break
 
             for o in ofertas:
+                # Filtrar la nota de Metacritic (80 o superior) directamente en Python
+                score = int(o.get('metacriticScore') or 0)
+                if score < 80:
+                    continue
+
                 s_id = o.get('steamAppID')
                 if not s_id or s_id in ids_vistos or str(s_id) in bloqueados_historial:
                     continue
@@ -173,15 +185,17 @@ def enviar_mensaje():
                     nombre_base = datos['title'].split(':')[0].lower()
                     if nombre_base in ids_vistos: continue
 
-                    datos['score'] = int(o.get('metacriticScore', 0))
+                    datos['score'] = score
                     if datos['es_multi']: candidatos_multi.append(datos)
                     else: candidatos_solo.append(datos)
 
                     ids_vistos.add(s_id)
                     ids_vistos.add(nombre_base)
                 
-                time.sleep(1.2)
-        except: continue
+                time.sleep(0.5)
+        except Exception as e:
+            print(f"❌ Error en página {pagina}: {e}")
+            continue
 
     # Aplicar nueva lógica de ordenamiento con el rango de 5 puntos
     for lista in [candidatos_multi, candidatos_solo]:
