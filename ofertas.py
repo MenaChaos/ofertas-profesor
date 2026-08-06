@@ -144,12 +144,24 @@ def enviar_mensaje():
 
     print(f"🚀 INICIANDO ESCANEO DE LARGO ALCANCE (900 JUEGOS)...")
 
+    # Encabezado para identificarnos como navegador y evitar bloqueos
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+
     for pagina in range(15):
         url = f"https://www.cheapshark.com/api/1.0/deals?storeID=1&upperPrice=20&onSale=1&metacritic=80&pageNumber={pagina}"
         try:
-            res = requests.get(url)
+            res = requests.get(url, headers=headers, timeout=10)
+            print(f"🔎 Probando página {pagina} - Respuesta HTTP: {res.status_code}")
+            
+            if res.status_code != 200:
+                continue
+
             ofertas = res.json()
-            if not ofertas: break
+            if not ofertas: 
+                print("ℹ️ No hay más ofertas disponibles.")
+                break
 
             for o in ofertas:
                 s_id = o.get('steamAppID')
